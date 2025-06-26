@@ -1,0 +1,6 @@
+Test Results Summary:
+=====================
+Precision: 0.98
+Recall: 0.80
+Detected anomalies: 41
+Actual anomalies: 50

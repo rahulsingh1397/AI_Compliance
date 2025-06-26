@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}{{ gettext('Dashboard') }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="h2 mb-4">{{ gettext('Compliance Dashboard') }}</h1>
+
+    <!-- Key Metrics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-file-alt me-2"></i>{{ gettext('Sensitive Files') }}</h5>
+                    <p class="card-text fs-4" id="sensitive-files-count">-</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-search me-2"></i>{{ gettext('Total Scans') }}</h5>
+                    <p class="card-text fs-4" id="total-scans-count">-</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-exclamation-triangle me-2"></i>{{ gettext('Risk Level') }}</h5>
+                    <p class="card-text fs-4" id="risk-level">-</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-secondary shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-calendar-alt me-2"></i>{{ gettext('Last Scan') }}</h5>
+                    <p class="card-text fs-4" id="last-scan-date">-</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Sensitive Data Types Chart -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-chart-pie me-2"></i>{{ gettext('Sensitive Data Types') }}</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="dataTypesChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Compliance Status Chart -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-balance-scale me-2"></i>{{ gettext('Compliance Status') }}</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="complianceStatusChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Alerts -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-white">
+            <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-bell me-2"></i>{{ gettext('Recent Alerts') }}</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>{{ gettext('Timestamp') }}</th>
+                            <th>{{ gettext('Message') }}</th>
+                            <th>{{ gettext('Severity') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-alerts-table">
+                        <!-- Data will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

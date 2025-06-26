@@ -1,0 +1,52 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+coverage.xml
+*.cover
+
+# Logs
+*.log
+
+# Database files
+instance/
+*.db
+*.sqlite3
+*.sqlite
+
+# Environment variables
+.env
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Generated directories
+test_results/
+
+# Large data files
+AIComplianceMonitoring/data/5000000 HRA Records.csv
+AIComplianceMonitoring/data/*.csv
+AIComplianceMonitoring/data/*.xlsx
+*.csv
+*.xlsx
+
+# Model files
+*.h5
+*.pkl
+*.joblib
+*.model

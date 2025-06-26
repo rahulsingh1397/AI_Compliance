@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Alert Details - {{ super() }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>Alert Details</h1>
+    {% if alert %}
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title">Alert #{{ alert.id }}</h5>
+        </div>
+        <div class="card-body">
+            <p><strong>Date:</strong> {{ alert.date }}</p>
+            <p><strong>Severity:</strong> <span class="badge bg-{{ alert.severity | lower }}">{{ alert.severity | capitalize }}</span></p>
+            <p><strong>Message:</strong> {{ alert.message | safe }}</p>
+            <hr>
+            <p><strong>Details:</strong></p>
+            <p>{{ alert.details | safe }}</p>
+        </div>
+        <div class="card-footer">
+            <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">Back to Dashboard</a>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-warning" role="alert">
+        Alert not found or no details available.
+    </div>
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">Back to Dashboard</a>
+    {% endif %}
+</div>
+{% endblock %}

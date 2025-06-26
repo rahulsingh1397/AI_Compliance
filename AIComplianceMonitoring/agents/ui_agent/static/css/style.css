@@ -1,0 +1,16 @@
+/* Add your custom styles here */
+body {
+    font-family: sans-serif;
+}
+
+.navbar {
+    margin-bottom: 20px;
+}
+
+.card-header {
+    font-weight: bold;
+}
+
+.badge.bg-high { background-color: #dc3545 !important; }
+.badge.bg-medium { background-color: #ffc107 !important; color: #000 !important; }
+.badge.bg-low { background-color: #198754 !important; }

@@ -1,0 +1,135 @@
+# Anomaly Detection Test Datasets
+
+The following datasets are publicly available and suitable for testing our anomaly detection system. Each dataset contains different types of anomalies that can help validate our models and reinforcement learning feedback loop.
+
+## Network Security Datasets
+
+1. **KDD Cup 1999 Dataset**
+   - URL: https://kdd.ics.uci.edu/databases/kddcup99/kddcup99.html
+   - Description: Classic intrusion detection dataset with labeled network attacks
+   - Features: 41 features related to network connections, protocols, and traffic patterns
+   - Anomaly types: DoS, probes, U2R, and R2L attacks
+   - Size: ~4.9GB (full), ~743MB (10% subset)
+   - Format: CSV
+
+2. **NSL-KDD Dataset**
+   - URL: https://www.unb.ca/cic/datasets/nsl.html
+   - Description: Refined version of KDD'99, removing redundant records
+   - Features: Same 41 features as KDD Cup 1999
+   - Size: ~88MB
+   - Format: CSV
+
+3. **UNSW-NB15 Dataset**
+   - URL: https://research.unsw.edu.au/projects/unsw-nb15-dataset
+   - Description: Modern network traffic with simulated attacks
+   - Features: 49 features including flow-based and content features
+   - Anomaly types: Exploits, DoS, reconnaissance, shellcode, worms
+   - Size: ~2.5GB
+   - Format: CSV and PCAP
+
+4. **CIC-IDS2017 Dataset**
+   - URL: https://www.unb.ca/cic/datasets/ids-2017.html
+   - Description: Network traffic with various attack scenarios
+   - Features: 80+ network flow features
+   - Anomaly types: Brute force, DoS, web attacks, infiltration, botnet
+   - Size: ~50GB (full), ~6GB (processed CSVs)
+   - Format: PCAP and CSV
+
+## System Log Datasets
+
+5. **Loghub Datasets**
+   - URL: https://github.com/logpai/loghub
+   - Description: Collection of system log datasets from various sources
+   - Includes: HDFS, Hadoop, Linux, Spark, OpenStack, etc.
+   - Anomaly types: System failures, errors, and operational issues
+   - Size: Varies by dataset (~100MB-2GB)
+   - Format: Text logs
+
+6. **BGL Log Dataset**
+   - URL: https://www.usenix.org/cfdr-data
+   - Description: Blue Gene/L supercomputer logs with labeled anomalies
+   - Features: Timestamp, node, severity, component, content
+   - Size: ~708MB
+   - Format: Text logs
+
+## User Behavior Datasets
+
+7. **CERT Insider Threat Dataset**
+   - URL: https://resources.sei.cmu.edu/library/asset-view.cfm?assetid=508099
+   - Description: Synthetic data simulating insider threats
+   - Features: User activities, file access, email, HTTP traffic
+   - Anomaly types: Data theft, unauthorized access, sabotage
+   - Size: ~94GB (full), ~1-2GB (smaller versions)
+   - Format: CSV
+
+8. **User-Computer Authentication Dataset**
+   - URL: https://www.kaggle.com/datasets/hadeerismail/user-computer-authentication
+   - Description: User-computer authentication logs
+   - Features: Time, user ID, computer ID, activity type
+   - Anomaly types: Unusual authentication patterns
+   - Size: ~7MB
+   - Format: CSV
+
+## Database Transaction Datasets
+
+9. **Credit Card Fraud Detection Dataset**
+   - URL: https://www.kaggle.com/mlg-ulb/creditcardfraud
+   - Description: Credit card transactions with fraud labels
+   - Features: 28 PCA-transformed features + time and amount
+   - Size: ~150MB
+   - Format: CSV
+
+10. **Medicare Fraud Detection Dataset**
+    - URL: https://www.kaggle.com/rohitrox/healthcare-provider-fraud-detection
+    - Description: Medicare provider data with fraud labels
+    - Features: Provider details, claims, payments
+    - Size: ~200MB
+    - Format: CSV
+
+## Specialized Compliance Datasets
+
+11. **GDPR Data Processing Records**
+    - URL: https://www.kaggle.com/datasets/direst/gdpr-data-processing-records
+    - Description: Synthetic GDPR compliance records
+    - Features: Processing activities, categories, purposes, transfers
+    - Size: ~1MB
+    - Format: CSV
+
+12. **AWS CloudTrail Log Sample**
+    - URL: https://github.com/aws-samples/amazon-guardduty-wksp/tree/master/artifacts
+    - Description: Sample AWS CloudTrail logs with security activities
+    - Features: API calls, resources accessed, IP addresses
+    - Size: ~2MB
+    - Format: JSON
+
+## Download Instructions
+
+For most datasets:
+1. Click on the provided URL
+2. Follow the website's instructions to download the dataset
+3. Extract if compressed (most are in .zip or .gz format)
+4. Place in the project's `data/test_data/` directory
+
+For Kaggle datasets:
+1. Kaggle account required
+2. Use Kaggle API or direct download from the website
+3. Example API command:
+   ```
+   kaggle datasets download -d mlg-ulb/creditcardfraud
+   ```
+
+## Usage Notes
+
+- Some datasets are very large; consider using the smaller subsets for initial testing
+- Many datasets require preprocessing before use (normalization, feature selection, etc.)
+- For datasets without clear anomaly labels, use the guidance documents provided with each dataset
+- When testing, document which dataset was used for each test run
+
+## Recommended Starting Datasets
+
+For initial testing of our system, we recommend:
+1. **NSL-KDD**: Manageable size with clear attack labels
+2. **Loghub (HDFS)**: Good representation of system log anomalies
+3. **Credit Card Fraud**: Well-balanced with real-world anomaly patterns
+
+These datasets cover different aspects of our detection system and provide good baseline performance metrics.

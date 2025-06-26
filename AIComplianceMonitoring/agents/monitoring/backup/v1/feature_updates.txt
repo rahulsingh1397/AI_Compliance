@@ -1,0 +1,164 @@
+MONITORING AGENT: FEATURE UPDATES (v1 to v2)
+
+1. REINFORCEMENT LEARNING FEEDBACK LOOP
+----------------------------------------
+We've implemented a multi-agent reinforcement learning feedback system to continuously 
+improve anomaly detection accuracy over time. This system consists of several components:
+
+a) Base Feedback Loop (feedback_loop.py)
+   - Records and tracks anomaly feedback
+   - Maintains statistics on true/false positives
+   - Provides persistence for feedback data
+
+b) Anomaly Validation Agent (validation_agent.py)
+   - Reviews detected anomalies using ML models
+   - Classifies potential true/false positives
+   - Identifies which anomalies need human review
+   - Uses RandomForestClassifier trained on historical feedback
+
+c) Human Interaction Agent (human_interaction_agent.py)
+   - Prioritizes anomalies for human review
+   - Manages review queues (high/medium/low priority)
+   - Collects structured feedback from human experts
+
+d) Feedback Integration Component (feedback_integration.py)
+   - Retrains anomaly detection models using feedback
+   - Adjusts Isolation Forest contamination parameters
+   - Optimizes Autoencoder reconstruction error thresholds
+   - Implements periodic automatic model updates
+
+e) Feedback Manager (rl_feedback_manager.py)
+   - Coordinates the entire feedback loop process
+   - Provides a unified API for the feedback system
+   - Manages background tasks for model updates
+
+2. ANOMALY CATEGORIES
+---------------------
+Our system detects five key categories of anomalies:
+
+a) Unauthorized Data Access
+   - Users accessing sensitive data without permissions
+   - Access attempts from unauthorized locations
+   - Service accounts performing unexpected operations
+
+b) Unusual Data Transfers
+   - Abnormal data movement volumes
+   - Suspicious download/upload patterns
+   - Potential data exfiltration attempts
+
+c) Suspicious User Behavior
+   - Unusual login times or locations
+   - Accessing multiple unrelated datasets in short periods
+   - Login pattern anomalies
+
+d) Anomalous System Activity
+   - Unexpected system or application behavior
+   - Unusual API call patterns or rates
+   - Potential indicators of compromise
+
+e) Compliance Policy Violations
+   - Data stored or processed in non-compliant ways
+   - Missing audit trails or required documentation
+   - Actions that breach regulatory requirements
+
+3. MODEL ENHANCEMENTS
+---------------------
+a) Hybrid Detection Approach
+   - Isolation Forest for statistical outliers
+   - Autoencoders for pattern-based anomalies
+   - Combined scoring for comprehensive detection
+
+b) Adaptive Thresholds
+   - Dynamic contamination parameters
+   - Optimized reconstruction error thresholds
+   - F1 score optimization from feedback
+
+c) Continuous Improvement
+   - Models automatically retrain from feedback
+   - Accuracy metrics tracked over time
+   - False positive rates continuously reduced
+
+4. USAGE INSTRUCTIONS
+---------------------
+a) Basic Setup:
+   ```python
+   from agents.monitoring.anomaly_detection import AnomalyDetector
+   from agents.monitoring.rl_feedback_manager import RLFeedbackManager
+   
+   # Create anomaly detector
+   detector = AnomalyDetector(config)
+   
+   # Initialize feedback system
+   feedback_manager = RLFeedbackManager(config, detector)
+   
+   # Start auto-update thread (optional)
+   feedback_manager.start_auto_update()
+   ```
+
+b) Processing Anomalies:
+   ```python
+   # When an anomaly is detected
+   anomaly_data = {
+       'id': 'anomaly-123',
+       'type': 'unauthorized_access',
+       'severity': 'high',
+       'user_id': 'user-456',
+       'resource_id': 'resource-789',
+       'timestamp': '2025-06-23T15:30:00',
+       'anomaly_score': 0.92,
+       # Additional context...
+   }
+   
+   # Process through feedback loop
+   result = feedback_manager.process_anomaly(anomaly_data)
+   
+   # Check if human review is needed
+   if result['requires_review']:
+       print(f"Queued for review with priority: {result['review_queue']['priority']}")
+   ```
+
+c) Human Review Workflow:
+   ```python
+   # Get next item for review
+   review_item = feedback_manager.get_next_review_item(max_priority='high')
+   
+   if review_item:
+       # Display to human reviewer
+       review_id = review_item['review_id']
+       anomaly_data = review_item['anomaly_data']
+       
+       # Once reviewer provides feedback
+       feedback_manager.submit_feedback(
+           review_id=review_id,
+           is_true_positive=True,  # or False
+           notes="Confirmed unauthorized access attempt"
+       )
+   ```
+
+d) Model Updates:
+   ```python
+   # Manual model update
+   update_result = feedback_manager.update_models()
+   
+   # Check update status
+   if update_result['status'] == 'completed':
+       print("Models successfully updated")
+   ```
+
+5. NEXT STEPS
+-------------
+a) Integration with Alert Module
+   - Connect feedback system to alert generation
+   - Adjust alert priorities based on validation confidence
+
+b) Dashboard Integration
+   - Add human review interface to dashboard
+   - Display feedback statistics and model accuracy
+
+c) Performance Optimization
+   - Implement batch processing for high-volume scenarios
+   - Add caching for frequent validation requests
+
+d) Advanced Model Features
+   - Implement semi-supervised learning from feedback
+   - Add active learning for targeted human review

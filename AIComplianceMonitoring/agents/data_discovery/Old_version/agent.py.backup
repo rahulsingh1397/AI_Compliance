@@ -1,0 +1,300 @@
+"""
+Data Discovery Agent for AI-Enhanced Data Privacy and Compliance Monitoring.
+
+This module implements the main Data Discovery Agent that integrates NLP models
+for unstructured data and ML classifiers for structured data to identify and
+classify sensitive information across an organization's infrastructure.
+"""
+
+import os
+import json
+import logging
+import pandas as pd
+from typing import List, Dict, Any, Union, Optional
+from concurrent.futures import ThreadPoolExecutor
+import sqlalchemy as sa
+
+from .nlp_model import NLPModel
+from .ml_classifier import MLClassifier
+from .metadata_handler import MetadataHandler
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+class DataDiscoveryAgent:
+    """
+    Data Discovery Agent for identifying and classifying sensitive data.
+    
+    This agent uses NLP models for unstructured data and ML classifiers for
+    structured data to identify sensitive information across an organization's
+    infrastructure, with a target accuracy of 95%.
+    """
+    
+    def __init__(self, 
+                db_uri: str = None,
+                nlp_model_name: str = "bert-base-uncased",
+                spacy_model: str = "en_core_web_lg",
+                ml_classifier_type: str = "random_forest"):
+        """
+        Initialize the Data Discovery Agent.
+        
+        Args:
+            db_uri: Database URI for metadata storage
+            nlp_model_name: Name of the BERT model to use
+            spacy_model: Name of the spaCy model to use
+            ml_classifier_type: Type of ML classifier ('random_forest' or 'svm')
+        """
+        logger.info("Initializing Data Discovery Agent")
+        
+        # Initialize components
+        self.nlp_model = NLPModel(bert_model_name=nlp_model_name, spacy_model=spacy_model)
+        self.ml_classifier = MLClassifier(classifier_type=ml_classifier_type)
+        self.metadata_handler = MetadataHandler(db_uri=db_uri)
+        
+        logger.info("Data Discovery Agent initialized successfully")
+    
+    def scan_unstructured_data(self, 
+                              file_path: str,
+                              document_identifier: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Scan unstructured data file for sensitive information.
+        Args:
+            file_path: Path to the file to scan
+            document_identifier: Optional identifier for the document
+            
+        Returns:
+            Dictionary with scan results
+        """
+        logger.info(f"Scanning unstructured data file: {file_path}")
+        
+        # Use file name as document identifier if not provided
+        if document_identifier is None:
+            document_identifier = os.path.basename(file_path)
+        
+        try:
+            # Read file content
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            
+            # Analyze document using NLP model
+            analysis_result = self.nlp_model.analyze_document(content)
+            
+            # Store metadata
+            record_id = self.metadata_handler.store_unstructured_data_metadata(
+                source_location=file_path,
+                document_identifier=document_identifier,
+                analysis_result=analysis_result
+            )
+            
+            # Add record ID to result
+            analysis_result["record_id"] = record_id
+            
+            logger.info(f"Unstructured data scan completed for {file_path}")
+            return analysis_result
+            
+        except Exception as e:
+            logger.error(f"Error scanning unstructured data file {file_path}: {str(e)}")
+            return {
+                "error": str(e),
+                "file_path": file_path,
+                "status": "failed"
+            }
+    
+    def scan_structured_data(self, 
+                            connection_string: str,
+                            table_name: str,
+                            sample_size: int = 1000) -> Dict[str, Any]:
+        """
+        Scan structured data (database table) for sensitive information.
+        
+        Args:
+            connection_string: Database connection string
+            table_name: Name of the table to scan
+            sample_size: Number of rows to sample for analysis
+            
+        Returns:
+            Dictionary with scan results
+        """
+        logger.info(f"Scanning structured data table: {table_name}")
+        
+        try:
+            # Create database connection
+            engine = sa.create_engine(connection_string)
+            
+            # Sample data from the table
+            query = f"SELECT * FROM {table_name} LIMIT {sample_size}"
+            df = pd.read_sql(query, engine)
+            
+            # Analyze each column
+            results = {}
+            for column in df.columns:
+                logger.info(f"Analyzing column: {column}")
+                
+                # Skip columns with all null values
+                if df[column].isnull().all():
+                    results[column] = {
+                        "column_name": column,
+                        "classification": "non-sensitive",
+                        "confidence": 1.0,
+                        "contains_sensitive_data": False,
+                        "reason": "All null values"
+                    }
+                    continue
+                
+                # Analyze column using ML classifier
+                column_result = self.ml_classifier.analyze_column(df[column], column)
+                
+                # Store metadata if sensitive
+                if column_result.get("contains_sensitive_data", False):
+                    record_id = self.metadata_handler.store_structured_data_metadata(
+                        source_location=connection_string,
+                        table_name=table_name,
+                        column_name=column,
+                        classification_result=column_result
+                    )
+                    column_result["record_id"] = record_id
+                
+                results[column] = column_result
+            
+            # Summarize results
+            sensitive_columns = [col for col, res in results.items() if res.get("contains_sensitive_data", False)]
+            
+            summary = {
+                "table_name": table_name,
+                "total_columns": len(df.columns),
+                "sensitive_columns": len(sensitive_columns),
+                "sensitive_column_names": sensitive_columns,
+                "column_results": results
+            }
+            
+            logger.info(f"Structured data scan completed for {table_name}")
+            return summary
+            
+        except Exception as e:
+            logger.error(f"Error scanning structured data table {table_name}: {str(e)}")
+            return {
+                "error": str(e),
+                "table_name": table_name,
+                "status": "failed"
+            }
+    
+    def batch_scan_files(self, 
+                        directory_path: str,
+                        file_extensions: List[str] = None,
+                        max_workers: int = 5) -> Dict[str, Any]:
+        """
+        Scan multiple files in a directory for sensitive information.
+        
+        Args:
+            directory_path: Path to the directory to scan
+            file_extensions: List of file extensions to include (e.g., ['.txt', '.pdf'])
+            max_workers: Maximum number of concurrent workers
+            
+        Returns:
+            Dictionary with scan results
+        """
+        logger.info(f"Batch scanning files in directory: {directory_path}")
+        
+        # Default file extensions if not provided
+        if file_extensions is None:
+            file_extensions = ['.txt', '.csv', '.json', '.xml', '.html', '.md']
+        
+        # Get list of files to scan
+        files_to_scan = []
+        for root, _, files in os.walk(directory_path):
+            for file in files:
+                if any(file.lower().endswith(ext) for ext in file_extensions):
+                    files_to_scan.append(os.path.join(root, file))
+        
+        logger.info(f"Found {len(files_to_scan)} files to scan")
+        
+        # Scan files in parallel
+        results = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_file = {
+                executor.submit(self.scan_unstructured_data, file_path): file_path
+                for file_path in files_to_scan
+            }
+            
+            for future in future_to_file:
+                file_path = future_to_file[future]
+                try:
+                    results[file_path] = future.result()
+                except Exception as e:
+                    logger.error(f"Error processing {file_path}: {str(e)}")
+                    results[file_path] = {
+                        "error": str(e),
+                        "file_path": file_path,
+                        "status": "failed"
+                    }
+        
+        # Summarize results
+        sensitive_files = [file for file, result in results.items() 
+                          if result.get("classification", {}).get("contains_sensitive_data", False)]
+        
+        summary = {
+            "directory_path": directory_path,
+            "total_files_scanned": len(files_to_scan),
+            "sensitive_files_found": len(sensitive_files),
+            "file_results": results
+        }
+        
+        logger.info(f"Batch scan completed for {directory_path}")
+        return summary
+    
+    def get_scan_statistics(self) -> Dict[str, Any]:
+        """
+        Get statistics about scanned data and sensitive information found.
+        
+        Returns:
+            Dictionary with scan statistics
+        """
+        # Get counts by source type
+        structured_records = self.metadata_handler.search_records(source_type="structured")
+        unstructured_records = self.metadata_handler.search_records(source_type="unstructured")
+        
+        # Get counts by data type
+        pii_records = sum(1 for r in structured_records + unstructured_records if r["data_type"].startswith("PII"))
+        financial_records = sum(1 for r in structured_records + unstructured_records if r["data_type"] == "Financial")
+        health_records = sum(1 for r in structured_records + unstructured_records if r["data_type"] == "Health")
+        
+        # Calculate average confidence
+        all_records = structured_records + unstructured_records
+        avg_confidence = sum(r["confidence_score"] for r in all_records) / len(all_records) if all_records else 0
+        
+        return {
+            "total_records": len(all_records),
+            "structured_data_records": len(structured_records),
+            "unstructured_data_records": len(unstructured_records),
+            "pii_records": pii_records,
+            "financial_records": financial_records,
+            "health_records": health_records,
+            "average_confidence_score": avg_confidence
+        }
+    
+    def train_ml_classifier(self, training_data: pd.DataFrame, target_column: str) -> Dict[str, float]:
+        """
+        Train the ML classifier with labeled data.
+        
+        Args:
+            training_data: DataFrame with training data
+            target_column: Name of the target column
+            
+        Returns:
+            Dictionary with training metrics
+        """
+        logger.info(f"Training ML classifier with {len(training_data)} samples")
+        
+        # Split features and target
+        X = training_data.drop(columns=[target_column])
+        y = training_data[target_column]
+        
+        # Train the classifier
+        metrics = self.ml_classifier.train(X, y)
+        
+        logger.info(f"ML classifier training completed with accuracy: {metrics['accuracy']:.4f}")
+        return metrics

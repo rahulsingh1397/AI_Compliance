@@ -43,7 +43,29 @@ class AlertModule:
         """
         logger.debug("Initializing AlertModule")
         self.config = config
-        self.db_path = Path(self.config.database_directory) / 'alerts.db'
+        # Handle config as dictionary (API passes dict) or as object with attributes
+        if isinstance(self.config, dict):
+            # Use database_path if available, otherwise use database_directory
+            db_path = self.config.get('database_path') or self.config.get('database_directory')
+            if not db_path:
+                # Set a default path if neither key is present
+                db_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'instance')
+                logger.warning(f"No database path specified in config, using default: {db_path}")
+            self.db_path = Path(db_path) / 'alerts.db'
+        else:
+            # Assume it's an object with attributes
+            try:
+                self.db_path = Path(self.config.database_directory) / 'alerts.db'
+            except AttributeError:
+                # Fallback if database_directory attribute doesn't exist
+                try:
+                    self.db_path = Path(self.config.database_path) / 'alerts.db'
+                except AttributeError:
+                    # Ultimate fallback
+                    default_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'instance')
+                    logger.warning(f"No database path found in config, using default: {default_path}")
+                    self.db_path = Path(default_path) / 'alerts.db'
+        
         self.db_path.parent.mkdir(exist_ok=True, parents=True)
         self.db_connection = None
         self.feedback_manager = feedback_manager

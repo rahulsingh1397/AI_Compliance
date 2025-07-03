@@ -1,193 +1,42 @@
 {
   "directory_path": "E:\\Projects\\Private\\AI_Compliance\\AIComplianceMonitoring\\data",
-  "total_files_scanned": 2,
-  "successful_scans": 2,
-  "failed_scans": 0,
-  "sensitive_files_found": 2,
-  "sensitive_file_paths": [
-    "ip-creditcard-email.csv",
-    "telephone-owned-property.xlsx"
-  ],
+  "total_files_scanned": 3,
+  "successful_scans": 0,
+  "failed_scans": 3,
+  "sensitive_files_found": 0,
+  "sensitive_file_paths": [],
   "scan_details": {
+    "5000000 HRA Records.csv": {
+      "document_id": "5000000 HRA Records.csv",
+      "file_path": "E:\\Projects\\Private\\AI_Compliance\\AIComplianceMonitoring\\data\\5000000 HRA Records.csv",
+      "file_name": "5000000 HRA Records.csv",
+      "error": "'type'",
+      "status": "failed",
+      "processing_notes": "Error during processing: 'type'"
+    },
     "ip-creditcard-email.csv": {
       "document_id": "ip-creditcard-email.csv",
       "file_path": "E:\\Projects\\Private\\AI_Compliance\\AIComplianceMonitoring\\data\\ip-creditcard-email.csv",
       "file_name": "ip-creditcard-email.csv",
-      "file_size": 7189,
-      "content_type": "csv",
-      "record_id": "727141f9-aef8-402d-b31e-ec2231f9fc77",
-      "contains_sensitive_data": true,
-      "sensitive_data_types": [
-        "Organization",
-        "Bank Account Number",
-        "Credit Card (American Express)",
-        "Person Name",
-        "Email Address",
-        "Geopolitical Entity",
-        "Credit Card (Visa)",
-        "Credit Card (Mastercard)",
-        "IP Address",
-        "Credit Card Number"
-      ],
-      "pandas_chunk_count": 1,
-      "total_nlp_chunk_count": 5,
-      "column_analysis": {
-        "id": {
-          "contains_sensitive_data": false,
-          "sensitive_data_types": [],
-          "pii_entities_found": 0
-        },
-        "name": {
-          "contains_sensitive_data": true,
-          "sensitive_data_types": [
-            "Person Name",
-            "Organization",
-            "Geopolitical Entity"
-          ],
-          "pii_entities_found": 139
-        },
-        "email": {
-          "contains_sensitive_data": true,
-          "sensitive_data_types": [
-            "Email Address"
-          ],
-          "pii_entities_found": 100
-        },
-        "ip_address": {
-          "contains_sensitive_data": true,
-          "sensitive_data_types": [
-            "IP Address"
-          ],
-          "pii_entities_found": 100
-        },
-        "credit_card": {
-          "contains_sensitive_data": true,
-          "sensitive_data_types": [
-            "Bank Account Number",
-            "Credit Card (American Express)",
-            "Credit Card (Mastercard)",
-            "Credit Card (Visa)",
-            "Credit Card Number"
-          ],
-          "pii_entities_found": 100
-        }
-      },
-      "status": "success",
-      "processing_notes": "Processed CSV with 1 pandas chunks."
+      "error": "'type'",
+      "status": "failed",
+      "processing_notes": "Error during processing: 'type'"
     },
     "telephone-owned-property.xlsx": {
       "document_id": "telephone-owned-property.xlsx",
       "file_path": "E:\\Projects\\Private\\AI_Compliance\\AIComplianceMonitoring\\data\\telephone-owned-property.xlsx",
       "file_name": "telephone-owned-property.xlsx",
-      "file_size": 12914,
-      "content_type": "xlsx",
-      "record_id": "2e4875e6-c98a-4f01-9b0f-36676b69fddb",
-      "contains_sensitive_data": true,
-      "sensitive_data_types": [
-        "Person Name",
-        "Organization",
-        "Date",
-        "Geopolitical Entity"
-      ],
-      "sensitive_columns": [],
-      "column_analysis": {
-        "test": {
-          "sheet_name": "test",
-          "columns": {
-            "ID": {
-              "contains_sensitive_data": false,
-              "sensitive_data_types": [],
-              "sample_data": [
-                "1",
-                "2",
-                "3"
-              ]
-            },
-            "Name": {
-              "contains_sensitive_data": false,
-              "sensitive_data_types": [],
-              "sample_data": [
-                "Perla V. Gray",
-                "Jeanie J. Yoo",
-                "Debbie R. Durant"
-              ]
-            },
-            "Address": {
-              "contains_sensitive_data": false,
-              "sensitive_data_types": [],
-              "sample_data": [
-                "3026 Heavner Court",
-                "4848 Meadow View Drive",
-                "1220 Wood Street"
-              ]
-            },
-            "Telephone number": {
-              "contains_sensitive_data": false,
-              "sensitive_data_types": [],
-              "sample_data": [
-                "515-962-6895",
-                "860-548-4307",
-                "985-974-6159"
-              ]
-            },
-            "Vehicle": {
-              "contains_sensitive_data": false,
-              "sensitive_data_types": [],
-              "sample_data": [
-                "1995 Toyota Mega Cruiser",
-                "2009 Ford Ecosport",
-                "2005 Hyundai Dynasty"
-              ]
-            },
-            "VIN number": {
-              "contains_sensitive_data": false,
-              "sensitive_data_types": [],
-              "sample_data": [
-                "2B5WB35Y72K119615",
-                "1FTRW12W07FA61725",
-                "JM1GJ1U64F1177346"
-              ]
-            }
-          }
-        }
-      },
-      "status": "success",
-      "processing_notes": "Processed with column-wise analysis and full document analysis"
+      "error": "'type'",
+      "status": "failed",
+      "processing_notes": "Error during processing: 'type'"
     }
   },
-  "total_files_processed": 2,
-  "total_size_processed": 20103,
-  "processing_time_seconds": 278.44,
+  "total_files_processed": 3,
+  "total_size_processed": 0,
+  "processing_time_seconds": 267.27,
   "processing_rate_files_sec": 0.01,
   "processing_rate_mb_sec": 0.0,
-  "sensitive_files": [
-    {
-      "path": "ip-creditcard-email.csv",
-      "sensitive_types": [
-        "Organization",
-        "Bank Account Number",
-        "Credit Card (American Express)",
-        "Person Name",
-        "Email Address",
-        "Geopolitical Entity",
-        "Credit Card (Visa)",
-        "Credit Card (Mastercard)",
-        "IP Address",
-        "Credit Card Number"
-      ],
-      "file_size": 7189
-    },
-    {
-      "path": "telephone-owned-property.xlsx",
-      "sensitive_types": [
-        "Person Name",
-        "Organization",
-        "Date",
-        "Geopolitical Entity"
-      ],
-      "file_size": 12914
-    }
-  ],
-  "start_time": "2025-06-11 22:24:38",
-  "end_time": "2025-06-11 22:29:17"
+  "sensitive_files": [],
+  "start_time": "2025-07-01 21:39:27",
+  "end_time": "2025-07-01 21:43:54"
 }

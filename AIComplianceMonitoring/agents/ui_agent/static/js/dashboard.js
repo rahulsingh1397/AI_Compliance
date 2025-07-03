@@ -17,6 +17,9 @@ document.addEventListener('DOMContentLoaded', function () {
             } else if (responseData.key_metrics) {
                 console.log('Detected flat data structure');
                 return responseData;
+            } else if (responseData.report_id) {
+                console.log('Detected raw report structure.');
+                return responseData;
             } else {
                 console.error('Unexpected data format:', responseData);
                 // Return mock data to prevent dashboard errors
@@ -58,41 +61,46 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!data) return;
         console.log('updateKeyMetrics received:', data);
         
-        // Handle both nested and flat structures
-        if (data.key_metrics) {
-            // Nested structure with key_metrics object
-            document.getElementById('sensitive-files-count').textContent = data.key_metrics.sensitive_files;
-            document.getElementById('total-scans-count').textContent = data.key_metrics.total_scans;
-            document.getElementById('risk-level').textContent = data.key_metrics.risk_level;
-            document.getElementById('last-scan-date').textContent = data.key_metrics.last_scan_date;
-        } else {
-            // Flat structure with top-level properties
-            document.getElementById('sensitive-files-count').textContent = data.sensitive_files || '-';
-            document.getElementById('total-scans-count').textContent = data.total_scans || '-';
+        try {
+            let metrics = {};
+            // Check for different data structures and normalize
+            if (data.key_metrics) {
+                // Handle nested structure with key_metrics object
+                metrics = data.key_metrics;
+            } else {
+                // Handle flat structure (from old mock data or new report)
+                metrics = data;
+            }
+
+            document.getElementById('sensitive-files-count').textContent = metrics.sensitive_files || '-';
+            document.getElementById('total-scans-count').textContent = metrics.total_scans || '-';
             
-            // Handle risk level (could be number or string)
-            let riskLevel = '-';
-            if (data.risk_level !== undefined) {
-                if (typeof data.risk_level === 'number') {
-                    riskLevel = data.risk_level === 3 ? 'High' : 
-                               data.risk_level === 2 ? 'Medium' : 'Low';
-                } else {
-                    riskLevel = data.risk_level;
-                }
+            // Handle risk level
+            let riskLevel = metrics.risk_level || '-';
+            if (typeof riskLevel === 'number') {
+                riskLevel = riskLevel === 3 ? 'High' : riskLevel === 2 ? 'Medium' : 'Low';
             }
             document.getElementById('risk-level').textContent = riskLevel;
-            
-            // Format last_scan date if available
-            let lastScan = '-';
-            if (data.last_scan) {
-                try {
-                    const date = new Date(data.last_scan);
-                    lastScan = date.toLocaleString();
-                } catch (e) {
-                    lastScan = data.last_scan;
-                }
+
+            // Handle last scan date - **THE KEY FIX**
+            // Prioritize 'created_at' from the new report format
+            let lastScanDate = '-';
+            if (metrics.created_at) {
+                lastScanDate = new Date(metrics.created_at).toLocaleString();
+            } else if (metrics.last_scan_date) { // Fallback for old mock data
+                lastScanDate = new Date(metrics.last_scan_date).toLocaleString();
+            } else if (metrics.last_scan) { // Check for last_scan from API response
+                lastScanDate = new Date(metrics.last_scan).toLocaleString();
             }
-            document.getElementById('last-scan-date').textContent = lastScan;
+            document.getElementById('last-scan-date').textContent = lastScanDate;
+
+        } catch (error) {
+            console.error('Error updating key metrics:', error);
+            // Set all metrics to '-' on error to avoid broken UI
+            document.getElementById('sensitive-files-count').textContent = '-';
+            document.getElementById('total-scans-count').textContent = '-';
+            document.getElementById('risk-level').textContent = '-';
+            document.getElementById('last-scan-date').textContent = '-';
         }
     }
 
@@ -247,6 +255,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Function to show or hide mock data indicator
     function showMockDataIndicator(isMockData, timestamp) {
+        console.log('showMockDataIndicator called with:', isMockData, timestamp);
+        
         // Get or create the indicator element
         let indicator = document.getElementById('mock-data-indicator');
         if (!indicator) {
@@ -265,22 +275,67 @@ document.addEventListener('DOMContentLoaded', function () {
             document.body.appendChild(indicator);
         }
         
+        // For testing purposes, always show the indicator
+        // Remove this line in production
+        // isMockData = true;
+        
         if (isMockData) {
             let timeDisplay = timestamp ? ` (${timestamp})` : '';
             indicator.textContent = `Demo Mode${timeDisplay}`;
             indicator.style.display = 'block';
+            console.log('Mock data indicator shown with text:', indicator.textContent);
         } else {
             indicator.style.display = 'none';
+            console.log('Mock data indicator hidden');
         }
     }
 
-    // Main function to initialize the dashboard
+    /**
+     * Main function to initialize the dashboard
+     * 
+     * This function handles:
+     * 1. Fetching compliance data from the API
+     * 2. Detecting if the data is mock data (using is_mock_data flag)
+     * 3. Showing the "Demo Mode" badge when mock data is detected
+     * 4. Updating all UI components with the fetched data
+     */
     async function initializeDashboard() {
         const data = await fetchComplianceData();
         if (data) {
-            // Check if this is mock data and show indicator if needed
-            showMockDataIndicator(data.is_mock_data, data.mock_generated_at);
+            // For debugging - log the entire data object to help diagnose structure issues
+            console.log('Full data object:', JSON.stringify(data));
             
+            /**
+             * Mock Data Detection Logic
+             * 
+             * We use strict equality (===) to check for the is_mock_data flag
+             * This avoids issues with truthy/falsy values that might be misinterpreted
+             * 
+             * The flag can be at either:
+             * - Top level of the response (data.is_mock_data)
+             * - Inside a nested data property (data.data.is_mock_data)
+             */
+            const isMockData = data.is_mock_data === true || 
+                             (data.data && data.data.is_mock_data === true) || 
+                             false;
+            
+            /**
+             * Mock Data Timestamp
+             * 
+             * When mock data is used, we display the timestamp when it was generated
+             * This helps users understand that they're looking at non-real-time data
+             * and when that mock data was created
+             */
+            const mockTimestamp = data.mock_generated_at || 
+                                (data.data && data.data.mock_generated_at) || 
+                                null;
+            
+            console.log('Mock data status:', isMockData, mockTimestamp);
+            
+            // Show mock data indicator only if the data is actually mock data
+            showMockDataIndicator(isMockData, mockTimestamp);
+            
+            // Update all UI components with the fetched data
             updateKeyMetrics(data);
             renderDataTypesChart(data);
             renderComplianceStatusChart(data);

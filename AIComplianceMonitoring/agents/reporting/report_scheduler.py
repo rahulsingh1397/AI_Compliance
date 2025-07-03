@@ -267,4 +267,3 @@ class ReportSchedulerModule:
             next_run = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
             
         return next_run
-"""

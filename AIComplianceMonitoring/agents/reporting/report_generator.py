@@ -91,7 +91,7 @@ class ReportGeneratorModule:
             "report_type": report_type,
             "start_date": start_date,
             "end_date": end_date,
-            "generation_date": datetime.now(),
+            "created_at": datetime.now(),
             "content": self._generate_mock_report_content(report_type, start_date, end_date),
             "metadata": {
                 "version": "1.0",
@@ -226,4 +226,3 @@ class ReportGeneratorModule:
             }
         else:
             return {"error": f"Unknown report type: {report_type}"}
-"""

@@ -87,6 +87,12 @@ class ReportStorageModule:
             Dictionary with storage metadata
         """
         logger.info(f"Storing {report_type} report in tamper-proof storage")
+
+        # Custom serializer for datetime objects
+        def default_serializer(o):
+            if isinstance(o, datetime):
+                return o.isoformat()
+            raise TypeError(f'Object of type {o.__class__.__name__} is not JSON serializable')
         
         # Generate a unique report ID
         report_id = str(uuid.uuid4())
@@ -97,17 +103,28 @@ class ReportStorageModule:
         # Calculate expiration date (3 years from now)
         expiry_date = timestamp + timedelta(days=365 * self.config.report_retention_years)
         
-        # Serialize report data
-        report_json = json.dumps(report_data)
+        # Serialize report data for hashing
+        report_json = json.dumps(report_data, default=default_serializer)
         
         # Generate a hash/signature for tamper-proofing
         report_hash = hashlib.sha256(report_json.encode()).hexdigest()
         
-        # Placeholder - would actually store in PostgreSQL in real implementation
-        # In a real implementation, we would:
-        # 1. Store the report JSON, hash, and metadata in PostgreSQL
-        # 2. Implement additional integrity verification
-        
+        # Store the report in a file
+        storage_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'latest_report.json')
+        report_to_store = {
+            "report_id": report_id,
+            "report_type": report_type,
+            "report_data": report_data,
+            "created_at": timestamp.isoformat(),
+            "expires_at": expiry_date.isoformat(),
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+            "hash": report_hash
+        }
+
+        with open(storage_path, 'w') as f:
+            json.dump(report_to_store, f, indent=4, default=default_serializer)
+
         # Update stats
         self.stats["reports_stored"] += 1
         self.stats["reports_active"] += 1
@@ -142,31 +159,21 @@ class ReportStorageModule:
         """
         logger.info(f"Retrieving reports with filters: type={report_type}, start={start_date}, end={end_date}")
         
-        # Placeholder - would query PostgreSQL in real implementation
-        # In a real implementation, we would:
-        # 1. Query the database with the provided filters
-        # 2. Apply pagination with limit and offset
-        # 3. Verify report integrity by checking stored hashes
-        
-        # Return mock reports
-        mock_reports = [
-            {
-                "report_id": f"mock-{i}",
-                "report_type": report_type or "gdpr_article30",
-                "created_at": datetime.now() - timedelta(days=i*30),
-                "expires_at": datetime.now() + timedelta(days=365*3 - i*30),
-                "start_date": datetime.now() - timedelta(days=i*30 + 30),
-                "end_date": datetime.now() - timedelta(days=i*30),
-                "size_bytes": 15000,
-                "hash": f"mock-hash-{i}"
-            }
-            for i in range(1, min(limit + 1, 6))  # Generate up to 5 mock reports or the limit
-        ]
-        
+        # Read the latest report from the file system
+        storage_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'latest_report.json')
+        if not os.path.exists(storage_path):
+            return {"reports": [], "count": 0, "total": 0, "limit": limit, "offset": offset}
+
+        with open(storage_path, 'r') as f:
+            latest_report = json.load(f)
+
+        # The UI expects a list of reports
+        reports = [latest_report]
+
         return {
-            "reports": mock_reports,
-            "count": len(mock_reports),
-            "total": 5,  # Total would be retrieved from DB in real implementation
+            "reports": reports,
+            "count": len(reports),
+            "total": len(reports),
             "limit": limit,
             "offset": offset
         }
@@ -223,4 +230,3 @@ class ReportStorageModule:
             "deleted_count": deleted_count,
             "timestamp": datetime.now()
         }
-"""

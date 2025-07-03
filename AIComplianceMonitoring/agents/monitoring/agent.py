@@ -23,8 +23,9 @@ from flask import Flask, jsonify, request
 # Import base agent
 import sys
 import os.path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from base_agent import BaseAgent, BaseAgentConfig
+# Add the root directory to sys.path to allow proper imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
+from AIComplianceMonitoring.agents.base_agent import BaseAgent, BaseAgentConfig
 
 # Configure structured logging
 logger = logging.getLogger(__name__)
@@ -103,15 +104,15 @@ class MonitoringAgent(BaseAgent):
         # This ensures they exist when _initialize_resources is called by the parent.
         try:
             logger.debug("Importing LogIngestionModule...")
-            from .log_ingestion import LogIngestionModule
+            from AIComplianceMonitoring.agents.monitoring.log_ingestion import LogIngestionModule
             logger.debug("LogIngestionModule imported successfully")
 
             logger.debug("Importing AnomalyDetectionModule...")
-            from .anomaly_detection import AnomalyDetectionModule
+            from AIComplianceMonitoring.agents.monitoring.anomaly_detection import AnomalyDetectionModule
             logger.debug("AnomalyDetectionModule imported successfully")
 
             logger.debug("Importing AlertModule...")
-            from .alert_module import AlertModule
+            from AIComplianceMonitoring.agents.monitoring.alert_module import AlertModule
             logger.debug("AlertModule imported successfully")
 
             # Initialize components with dependency injection

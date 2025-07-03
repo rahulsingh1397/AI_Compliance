@@ -2,6 +2,7 @@ import requests
 import logging
 import os
 import sys
+import json
 from flask import Blueprint, jsonify, request, current_app
 from flask_login import login_required
 from datetime import datetime
@@ -9,7 +10,7 @@ from datetime import datetime
 # Configuration for mock data behavior
 class MockConfig:
     # Set to False to disable mock data fallback in production
-    ENABLE_MOCK_FALLBACK = True
+    ENABLE_MOCK_FALLBACK = False
 
 # Configure logging
 log = logging.getLogger(__name__)
@@ -42,145 +43,113 @@ def format_timestamp(iso_string):
         log.warning(f"Could not parse timestamp: {iso_string}")
         return "Invalid Date"
 
-@api_bp.route('/compliance_data')
-# Temporarily removed login_required for testing
-# @login_required
-def compliance_data():
-    """Fetches and aggregates data from the Monitoring API."""
-    log.info("--- Request received for /api/compliance_data ---")
-    print("CONSOLE: Request received for /api/compliance_data - User is authenticated")
-    print(f"CONSOLE: Current user: {request.remote_addr}")
-    try:
-        # Determine the Monitoring API base URL
-        monitoring_api_url = os.environ.get('MONITORING_API_BASE_URL')
-        
-        # If not in environment, try to use the same host as the current request, but with port 5001
-        if not monitoring_api_url and request.host:
-            # Extract host without port
-            host = request.host.split(':')[0]
-            monitoring_api_url = f"http://{host}:5001"
-        
-        # Fallback to default if all else fails
-        monitoring_api_url = monitoring_api_url or DEFAULT_API_URL
-        
-        log.info(f"Using Monitoring API URL: {monitoring_api_url}")
-        print(f"CONSOLE: Using Monitoring API URL: {monitoring_api_url}")
-        
-        # Fetch stats and alerts from the Monitoring API
-        log.info(f"Fetching stats from {monitoring_api_url}/stats")
-        print(f"CONSOLE: Fetching stats from {monitoring_api_url}/stats")
-        stats_response = requests.get(f"{monitoring_api_url}/stats", timeout=5)
-        log.info(f"Stats response status: {stats_response.status_code}")
-        print(f"CONSOLE: Stats response status: {stats_response.status_code}")
-        
-        log.info(f"Fetching alerts from {monitoring_api_url}/alerts?limit=5")
-        print(f"CONSOLE: Fetching alerts from {monitoring_api_url}/alerts?limit=5")
-        alerts_response = requests.get(f"{monitoring_api_url}/alerts?limit=5", timeout=5)
-        log.info(f"Alerts response status: {alerts_response.status_code}")
-        print(f"CONSOLE: Alerts response status: {alerts_response.status_code}")
-
-        # Check for HTTP errors
-        stats_response.raise_for_status()
-        alerts_response.raise_for_status()
-
-        # Extract the 'data' payload from the responses, with defaults to prevent errors
-        stats_payload = stats_response.json().get('data', {})
-        alerts_payload = alerts_response.json().get('data', [])
-        log.debug(f"Stats payload received: {stats_payload}")
-        log.debug(f"Alerts payload received: {alerts_payload}")
-        print(f"CONSOLE: Stats payload (truncated): {str(stats_payload)[:200]}...")
-        print(f"CONSOLE: Alerts payload count: {len(alerts_payload)}")
-
-        # --- Transform data for the frontend --- 
-
-        # Extract stats from different modules
-        ingestion_stats = stats_payload.get('ingestion', {})
-        detection_stats = stats_payload.get('detection', {})
-        alert_stats = stats_payload.get('alerts', {})
-
-        # 1. Key Metrics from Stats
-        # Note: The keys 'alerts_by_priority', 'sensitive_files_found', 'total_scans', 
-        # and 'newest_alert_timestamp' are assumed based on the UI's needs.
-        # These may need to be implemented in the corresponding agent modules if not present.
-        alerts_by_priority = alert_stats.get('alerts_by_priority', {})
-        risk_level = "Low"
-        if alerts_by_priority.get('high', 0) > 0:
-            risk_level = "High"
-        elif alerts_by_priority.get('medium', 0) > 0:
-            risk_level = "Medium"
-
-        key_metrics = {
-            'sensitive_files': detection_stats.get('sensitive_files_found', 0),
-            'total_scans': ingestion_stats.get('total_scans', 0),
-            'risk_level': risk_level,
-            'last_scan_date': format_timestamp(alert_stats.get('newest_alert_timestamp'))
-        }
-
-        # 2. Recent Alerts Table from Alerts
-        recent_alerts = [
-            {
-                'timestamp': format_timestamp(alert.get('timestamp')),
-                'message': alert.get('message', 'No message provided'),
-                'severity': alert.get('priority', 'unknown').capitalize()
-            } for alert in alerts_payload
-        ]
-
-        # 3. Data for Charts (using stats)
-        sensitive_data_types = {
-            'High Priority': alerts_by_priority.get('high', 0),
-            'Medium Priority': alerts_by_priority.get('medium', 0),
-            'Low Priority': alerts_by_priority.get('low', 0)
-        }
-        
-        # 4. Mock Compliance Status (pending other agents)
-        compliance_status = {'GDPR': 95, 'CCPA': 88, 'HIPAA': 92}
-
-        # 5. Final combined data structure
-        final_data = {
-            'key_metrics': key_metrics,
-            'sensitive_data_types': sensitive_data_types,
-            'compliance_status': compliance_status,
-            'recent_alerts': recent_alerts
-        }
-        log.info(f"Returning final data: {final_data}")
-        print(f"CONSOLE: Returning final data with {len(recent_alerts)} alerts and risk level {risk_level}")
-
-        return jsonify(final_data)
-
-    except requests.exceptions.RequestException as e:
-        log.error(f"Could not connect to Monitoring API at {monitoring_api_url}: {e}")
-        print(f"CONSOLE ERROR: Could not connect to Monitoring API at {monitoring_api_url}: {e}")
-        # Check if mock data is enabled
-        if not MockConfig.ENABLE_MOCK_FALLBACK:
-            return jsonify({"error": "Could not connect to Monitoring API"}), 503
-            
-        # Generate current timestamp for mock data
+def get_mock_data(current_time=None):
+    """Generate mock data for testing"""
+    if current_time is None:
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    return {
+        'key_metrics': {
+            'sensitive_files': 12,
+            'total_scans': 45,
+            'risk_level': 3,
+            'last_scan': current_time
+        },
+        'sensitive_data_types': {
+            'High Priority': 3,
+            'Medium Priority': 12,
+            'Low Priority': 27
+        },
+        'compliance_status': {'GDPR': 95, 'CCPA': 88, 'HIPAA': 92},
+        'recent_alerts': [
+            {'timestamp': current_time, 'message': 'Mock alert 1', 'severity': 'High'},
+            {'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'message': 'Mock alert 2', 'severity': 'Medium'}
+        ],
+        'is_mock_data': True,
+        'mock_generated_at': current_time
+    }
+
+def transform_report_to_dashboard_view(report):
+    """Transforms the raw report structure into the format expected by the dashboard frontend."""
+    log.debug("Transforming raw report for dashboard view.")
+    
+    report_content = report.get('report_data', {}).get('content', {})
+    
+    # Placeholders for metrics not present in the GDPR report.
+    # These would typically come from a discovery scan summary.
+    sensitive_files = report.get('sensitive_files', 25)
+    total_scans = report.get('total_scans', 50)
+    risk_level = report.get('risk_level', 'Medium')
+    
+    last_scan = report.get('created_at', report.get('end_date'))
+
+    # Summarize sensitive data types from processing activities
+    sensitive_data_types = {}
+    activities = report_content.get('processing_activities', [])
+    if activities:
+        for activity in activities:
+            for category in activity.get('categories', []):
+                # Normalize category names for better display
+                normalized_category = category.replace("_", " ").title()
+                sensitive_data_types[normalized_category] = sensitive_data_types.get(normalized_category, 0) + 1
+    else:
+        sensitive_data_types = {'PII': 5, 'Financial': 10, 'Health': 3}
+
+    # Placeholder for compliance status
+    compliance_status = {'GDPR': 98, 'CCPA': 75, 'HIPAA': 85}
+
+    dashboard_data = {
+        'key_metrics': {
+            'sensitive_files': sensitive_files,
+            'total_scans': total_scans,
+            'risk_level': risk_level,
+            'last_scan': last_scan
+        },
+        'sensitive_data_types': sensitive_data_types,
+        'compliance_status': compliance_status,
+        'recent_alerts': [],
+        'is_mock_data': False,
+        'source_report_id': report.get('report_id'),
+        'source_report_type': report.get('report_type')
+    }
+    
+    log.debug(f"Transformed data: {dashboard_data}")
+    return dashboard_data
+
+@api_bp.route('/compliance_data')
+@login_required
+def compliance_data():
+    """Endpoint to get compliance data for the dashboard"""
+    try:
+        # Path to the report file is in the project root, relative to this file's location
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        report_file_path = os.path.join(current_dir, '..', '..', '..', 'latest_report.json')
         
-        # Return mock data to prevent frontend crash
-        mock_data = {
-            'key_metrics': {
-                'sensitive_files': 42,
-                'total_scans': 150,
-                'risk_level': 'Medium',
-                'last_scan_date': current_time
-            },
-            'sensitive_data_types': {
-                'High Priority': 3,
-                'Medium Priority': 12,
-                'Low Priority': 27
-            },
-            'compliance_status': {'GDPR': 95, 'CCPA': 88, 'HIPAA': 92},
-            'recent_alerts': [
-                {'timestamp': current_time, 'message': 'Mock alert 1', 'severity': 'High'},
-                {'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'message': 'Mock alert 2', 'severity': 'Medium'}
-            ],
-            'is_mock_data': True,  # Flag to indicate this is mock data
-            'mock_generated_at': current_time
-        }
-        log.info("Returning mock data due to API connection failure")
-        print(f"CONSOLE: Returning mock data due to API connection failure at {current_time}")
-        return jsonify(mock_data)
+        log.info(f"Attempting to read compliance data from: {report_file_path}")
+        
+        if os.path.exists(report_file_path):
+            with open(report_file_path, 'r') as f:
+                data = json.load(f)
+            log.info("Successfully loaded compliance data from file.")
+            # Transform the data for the dashboard view
+            dashboard_view_data = transform_report_to_dashboard_view(data)
+            return jsonify(dashboard_view_data)
+        else:
+            log.warning(f"Report file not found at {report_file_path}. Falling back to mock data.")
+            # Check if mock fallback is enabled
+            if not MockConfig.ENABLE_MOCK_FALLBACK:
+                return jsonify({
+                    "error": "Compliance report not found",
+                    "details": f"File not found at {report_file_path}",
+                    "mock_fallback_enabled": False
+                }), 404
+            
+            # Use mock data as fallback
+            log.warning("Using mock data as fallback")
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            mock_data = get_mock_data(current_time)
+            return jsonify(mock_data)
+            
     except Exception as e:
         log.exception(f"An error occurred in compliance_data endpoint: {e}")
         print(f"CONSOLE ERROR: An error occurred in compliance_data endpoint: {e}")

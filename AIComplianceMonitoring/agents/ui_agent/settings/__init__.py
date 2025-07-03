@@ -2,8 +2,8 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 import bcrypt
 
-from ..models import db
-from ..forms import ProfileForm, PasswordChangeForm
+from AIComplianceMonitoring.agents.ui_agent.extensions import db
+from AIComplianceMonitoring.agents.ui_agent.forms import ProfileForm, PasswordChangeForm
 
 settings_bp = Blueprint('settings', __name__)
 

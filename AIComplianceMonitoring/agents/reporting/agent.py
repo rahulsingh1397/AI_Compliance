@@ -13,19 +13,18 @@ import time
 import pandas as pd
 from typing import List, Dict, Any, Union, Optional, Tuple
 from datetime import datetime, timedelta
-from dataclasses import dataclass, field
-from pydantic import validate_arguments
+from pydantic import validate_arguments, Field
 
 # Import base agent
 import sys
 import os.path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from base_agent import BaseAgent, BaseAgentConfig
+# Add the root directory to sys.path to allow proper imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
+from AIComplianceMonitoring.agents.base_agent import BaseAgent, BaseAgentConfig
 
 # Configure structured logging
 logger = logging.getLogger(__name__)
 
-@dataclass
 class ReportingAgentConfig(BaseAgentConfig):
     """Configuration for Reporting Agent"""
     agent_name: str = "reporting_agent"
@@ -38,15 +37,15 @@ class ReportingAgentConfig(BaseAgentConfig):
     report_retention_years: int = 3
     
     # Report types and formats
-    supported_regulations: List[str] = field(default_factory=lambda: [
+    supported_regulations: List[str] = Field(default_factory=lambda: [
         "gdpr_article30", "ccpa", "hipaa"
     ])
-    supported_formats: List[str] = field(default_factory=lambda: [
+    supported_formats: List[str] = Field(default_factory=lambda: [
         "pdf", "csv"
     ])
     
     # Scheduling configuration
-    default_schedule: Dict[str, str] = field(default_factory=lambda: {
+    default_schedule: Dict[str, str] = Field(default_factory=lambda: {
         "gdpr_article30": "monthly",
         "ccpa": "quarterly",
         "hipaa": "monthly"
@@ -79,24 +78,23 @@ class ReportingAgent(BaseAgent):
             report_storage: Pre-initialized report storage module
             report_scheduler: Pre-initialized report scheduler module
         """
-        # Initialize base agent
+        # Initialize config first
         self.config = config or ReportingAgentConfig()
-        super().__init__(config=self.config)
         
         logger.debug("Reporting agent initializing specialized components")
         
-        # Initialize the component modules
+        # Initialize the component modules before calling super().__init__
         try:
             logger.debug("Importing ReportGeneratorModule...")
-            from .report_generator import ReportGeneratorModule
+            from AIComplianceMonitoring.agents.reporting.report_generator import ReportGeneratorModule
             logger.debug("ReportGeneratorModule imported successfully")
             
             logger.debug("Importing ReportStorageModule...")
-            from .report_storage import ReportStorageModule
+            from AIComplianceMonitoring.agents.reporting.report_storage import ReportStorageModule
             logger.debug("ReportStorageModule imported successfully")
             
             logger.debug("Importing ReportSchedulerModule...")
-            from .report_scheduler import ReportSchedulerModule
+            from AIComplianceMonitoring.agents.reporting.report_scheduler import ReportSchedulerModule
             logger.debug("ReportSchedulerModule imported successfully")
             
             # Initialize components with dependency injection
@@ -104,7 +102,7 @@ class ReportingAgent(BaseAgent):
             self.report_storage = report_storage or ReportStorageModule(self.config)
             self.report_scheduler = report_scheduler or ReportSchedulerModule(self.config)
             
-            logger.info("Reporting agent initialized successfully")
+            logger.info("Reporting agent components initialized successfully")
         
         except ImportError as e:
             logger.error(f"Failed to import required modules: {str(e)}")
@@ -112,6 +110,9 @@ class ReportingAgent(BaseAgent):
         except Exception as e:
             logger.error(f"Error initializing Reporting Agent: {str(e)}")
             raise
+
+        # Initialize base agent AFTER components are ready
+        super().__init__(config=self.config)
     
     def _initialize_resources(self):
         """Initialize resources needed by the reporting agent"""
@@ -317,23 +318,35 @@ class ReportingAgent(BaseAgent):
 
 # For direct testing
 if __name__ == "__main__":
+    print("--- Starting Reporting Agent Test --- ")
     # Set up logging
     logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
-    # Create agent with test configuration
-    config = ReportingAgentConfig()
-    
-    agent = ReportingAgent(config=config)
-    
-    # Test report generation
-    result = agent.generate_report(
-        report_type="gdpr_article30",
-        start_date=datetime.now() - timedelta(days=30),
-        end_date=datetime.now()
-    )
-    
-    print(f"Report generation result: {result}")
-"""
+    try:
+        # Create agent with test configuration
+        print("Initializing agent...")
+        config = ReportingAgentConfig()
+        agent = ReportingAgent(config=config)
+        print("Agent initialized.")
+        
+        # Test report generation
+        print("Generating report...")
+        result = agent.generate_report(
+            report_type="gdpr_article30",
+            start_date=datetime.now() - timedelta(days=30),
+            end_date=datetime.now()
+        )
+        
+        print("--- Report Generation Result ---")
+        print(result)
+        print("------------------------------------")
+
+    except Exception as e:
+        print(f"An unhandled exception occurred: {e}")
+        import traceback
+        traceback.print_exc()
+
+    print("--- Reporting Agent Test Finished ---")

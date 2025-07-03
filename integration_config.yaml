@@ -1,0 +1,44 @@
+# Configuration for the Integration Agent
+
+# Polling interval in seconds to check for new alerts
+polling_interval: 60
+
+# Ticketing system configuration
+ticketing:
+  # Currently supported: 'jira'
+  provider: 'jira'
+  jira:
+    # Your Jira instance URL
+    server: 'https://your-domain.atlassian.net'
+    # Your Jira account email
+    user: 'your-email@example.com'
+    # Your Jira API token (store securely, e.g., in environment variables)
+    api_token: 'YOUR_JIRA_API_TOKEN'
+    # The project key for creating tickets
+    project_key: 'COMP'
+    # The issue type for new tickets
+    issue_type: 'Task'
+
+# SIEM system configuration
+siem:
+  # Currently supported: 'qradar'
+  provider: 'qradar'
+  qradar:
+    # Your QRadar console URL (e.g., https://your-qradar-console.example.com)
+    server: 'YOUR_QRADAR_SERVER_URL'
+    # Your QRadar authorized service token
+    api_token: 'YOUR_QRADAR_AUTH_TOKEN'
+    # Optional: specify API version, e.g., '12.0'
+    api_version: '12.0'
+    # Optional: filter for offenses to fetch
+    offense_filter: 'status="OPEN" and severity > 5'
+
+# Notification system configuration
+notification:
+  # Currently supported: 'slack'
+  provider: 'slack'
+  slack:
+    # Your Slack API token (store securely)
+    api_token: 'YOUR_SLACK_BOT_TOKEN'
+    # The channel to send notifications to (e.g., '#compliance-alerts')
+    channel: 'YOUR_SLACK_CHANNEL'

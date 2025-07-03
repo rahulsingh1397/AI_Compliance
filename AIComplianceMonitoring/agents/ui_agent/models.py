@@ -1,4 +1,4 @@
-from .extensions import db
+from AIComplianceMonitoring.agents.ui_agent.extensions import db
 from flask_login import UserMixin
 from datetime import datetime
 

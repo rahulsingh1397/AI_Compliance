@@ -16,6 +16,7 @@ import spacy
 import numpy as np
 import logging
 import warnings
+import time
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import pandas as pd
@@ -72,11 +73,20 @@ class NLPModel:
             chunk_size: Maximum number of tokens per chunk for BERT processing.
             stride: Number of overlapping tokens between chunks.
         """
-        # Configure device
+        self.chunk_size = chunk_size
+        self.stride = stride
+        self.gpu_batch_size = 4 if torch.cuda.is_available() else 2
+
+        self._initialize_device(device)
+        self._initialize_classifier(bert_classifier_model_name)
+        self._initialize_ner_pipelines(bert_ner_model_name, spacy_model_name)
+
+    def _initialize_device(self, device: Optional[Union[int, str]]):
+        """Determines and sets the computational device (CPU/GPU)."""
         if device is None:
             self.device_id = 0 if torch.cuda.is_available() else -1
         elif isinstance(device, str) and device.lower() == 'cuda':
-            self.device_id = 0 if torch.cuda.is_available() else -1 # Default to GPU 0 if available
+            self.device_id = 0 if torch.cuda.is_available() else -1
         elif isinstance(device, str) and device.lower() == 'cpu':
             self.device_id = -1
         elif isinstance(device, int):
@@ -84,147 +94,81 @@ class NLPModel:
         else:
             logger.warning(f"Invalid device specified: {device}. Defaulting to auto-detection.")
             self.device_id = 0 if torch.cuda.is_available() else -1
-
         logger.info(f"Initializing NLPModel on device: {'cuda:' + str(self.device_id) if self.device_id != -1 else 'cpu'}")
 
-        # Initialize BERT tokenizer and model for Text Classification
-        logger.info(f"Loading BERT classification model: {bert_classifier_model_name}")
-        
-        # Set GPU batch size for efficient processing
-        self.gpu_batch_size = 4 if torch.cuda.is_available() else 2
-        
-        # Determine if we can use FP16 precision for better performance
+    def _initialize_classifier(self, model_name: str):
+        """Initializes the BERT model and pipeline for text classification."""
+        logger.info(f"Loading BERT classification model: {model_name}")
         use_fp16 = torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 7
-        torch_dtype = torch.float16 if use_fp16 else None
-        
-        if use_fp16:
-            logger.info("Using FP16 precision for better GPU performance")
-        
-        self.classifier_model = AutoModelForSequenceClassification.from_pretrained(
-            bert_classifier_model_name, 
-            torch_dtype=torch_dtype
-        )
-        self.classifier_tokenizer = AutoTokenizer.from_pretrained(bert_classifier_model_name)
-        
-        # Get device ID for pipeline
-        self.device_id = 0 if torch.cuda.is_available() else -1
-        
-        # Initialize the text classifier pipeline with FP16 support if available
-        self.text_classifier_pipeline = pipeline(
-            "text-classification",
-            model=self.classifier_model,
-            tokenizer=self.classifier_tokenizer,
-            device=self.device_id,
-            return_all_scores=True,
-            framework="pt",
-            torch_dtype=torch_dtype  # Enable FP16 if supported by GPU
-        )
+        model_kwargs = {"torch_dtype": torch.float16} if use_fp16 else {}
 
-        # Determine the positive label for the classifier model
         try:
-            if hasattr(self.classifier_model, 'config') and hasattr(self.classifier_model.config, 'id2label') and 1 in self.classifier_model.config.id2label:
-                self.positive_label_str_lower = self.classifier_model.config.id2label[1].lower()
-                logger.info(f"Using '{self.positive_label_str_lower}' as the primary sensitive/positive label for classification.")
-            else:
-                # This case might occur if the model is not binary or id2label is structured differently
-                logger.warning("Could not reliably determine positive label (id 1) from model config. Defaulting to 'positive'.")
-                self.positive_label_str_lower = "positive"
-        except Exception as e: # Catch any other unexpected errors during config access
-            logger.error(f"Error determining positive label from model config: {e}. Defaulting to 'positive'.")
-            self.positive_label_str_lower = "positive"
-        
-        # Define keywords that indicate a sensitive classification, including the determined positive label and a generic 'sensitive' term
-        self.sensitive_label_keywords = {self.positive_label_str_lower, "sensitive"}
+            self.classifier_tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self.classifier_model = AutoModelForSequenceClassification.from_pretrained(model_name, **model_kwargs)
+            self.classifier_pipeline = pipeline(
+                "text-classification",
+                model=self.classifier_model,
+                tokenizer=self.classifier_tokenizer,
+                device=self.device_id,
+                batch_size=self.gpu_batch_size,
+                return_all_scores=True
+            )
+            logger.info("BERT classification pipeline initialized successfully.")
+        except Exception as e:
+            logger.error(f"Failed to load BERT classification model '{model_name}': {e}")
+            raise
 
-        # Initialize BERT tokenizer and model for NER
+    def _initialize_ner_pipelines(self, bert_ner_model_name: str, spacy_model_name: str):
+        """Initializes BERT and spaCy models and pipelines for Named Entity Recognition."""
+        # Initialize BERT NER Pipeline
         logger.info(f"Loading BERT NER model: {bert_ner_model_name}")
-        self.ner_tokenizer = AutoTokenizer.from_pretrained(bert_ner_model_name, use_fast=True)
-        self.ner_model = AutoModelForTokenClassification.from_pretrained(bert_ner_model_name)
-        self.ner_pipeline = pipeline(
-            "ner", 
-            model=self.ner_model,
-            tokenizer=self.ner_tokenizer, 
-            device=self.device_id,
-            aggregation_strategy="simple" # Groups sub-word tokens
-        )
+        try:
+            self.ner_pipeline = pipeline(
+                "ner",
+                model=bert_ner_model_name,
+                tokenizer=bert_ner_model_name,
+                device=self.device_id,
+                batch_size=self.gpu_batch_size,
+                grouped_entities=True
+            )
+            logger.info("BERT NER pipeline initialized successfully.")
+        except Exception as e:
+            logger.error(f"Failed to load BERT NER model '{bert_ner_model_name}': {e}", exc_info=True)
+            self.ner_pipeline = None
 
-        # Initialize spaCy model with NER capabilities
+        # Initialize spaCy
         logger.info(f"Loading spaCy model: {spacy_model_name}")
         try:
-            # Load the model with all components including NER
             self.nlp = spacy.load(spacy_model_name)
+            if 'sentencizer' not in self.nlp.pipe_names:
+                self.nlp.add_pipe('sentencizer', first=True)
             
-            # Check if sentencizer is already in the pipeline
-            if 'sentencizer' not in self.nlp.pipe_names:
-                try:
-                    # Add sentencizer at the beginning of the pipeline
-                    self.nlp.add_pipe('sentencizer', first=True)
-                    logger.info("Added 'sentencizer' to the beginning of the spaCy pipeline.")
-                except Exception as e_sent:
-                    logger.error(f"Could not add 'sentencizer' to spaCy pipeline: {e_sent}")
-                    # Fallback to basic chunking
-                    logger.warning("Falling back to basic chunking without sentence boundaries.")
-            else:
-                logger.info("Found 'sentencizer' in the spaCy pipeline.")
-                
-            # Only disable components we don't need for PII detection
-            # Keep the NER component since we need it for entity recognition
-            for pipe_name in ["parser", "textcat"]:
-                if pipe_name in self.nlp.pipe_names:
-                    self.nlp.disable_pipe(pipe_name)
-                    logger.debug(f"Disabled spaCy pipeline component: {pipe_name}")
-                    
-            # Make sure NER is enabled if available
-            if "ner" in self.nlp.pipe_names and "ner" in self.nlp.disabled:
-                self.nlp.enable_pipe("ner")
-                logger.info("Enabled spaCy NER component for entity detection")
-                    
-            # Verify sentencizer is still enabled
-            if 'sentencizer' not in self.nlp.pipe_names:
-                logger.warning("Sentencizer was disabled. Re-adding it to the pipeline.")
-                try:
-                    self.nlp.add_pipe('sentencizer', first=True)
-                except Exception as e:
-                    logger.error(f"Failed to re-add sentencizer: {e}")
-                    
-        except OSError:
+            pipes_to_disable = [p for p in ["parser", "textcat"] if p in self.nlp.pipe_names]
+            if pipes_to_disable:
+                self.nlp.disable_pipes(*pipes_to_disable)
+
+            self._add_custom_patterns_to_spacy()
+            logger.info("spaCy pipeline initialized and configured successfully.")
+        except (OSError, ValueError):
             logger.warning(f"spaCy model '{spacy_model_name}' not found. Attempting to download...")
             from spacy.cli import download as spacy_download
             try:
                 spacy_download(spacy_model_name)
                 self.nlp = spacy.load(spacy_model_name)
-                
-                # Add sentencizer if not present after download
-                if 'sentencizer' not in self.nlp.pipe_names:
-                    try:
-                        self.nlp.add_pipe('sentencizer', first=True)
-                        logger.info("Added 'sentencizer' after downloading spaCy model.")
-                    except Exception as e_dl_sent:
-                        logger.error(f"Could not add sentencizer after download: {e_dl_sent}")
-                
-                # Disable unnecessary components
-                for pipe_name in ["parser", "textcat"]:
-                    if pipe_name in self.nlp.pipe_names:
-                        self.nlp.disable_pipe(pipe_name)
-                        logger.debug(f"Disabled downloaded model's pipeline component: {pipe_name}")
-                        
                 logger.info(f"Successfully downloaded and loaded spaCy model: {spacy_model_name}")
-                
+                # Recurse to configure the newly downloaded model
+                self._initialize_ner_pipelines(bert_ner_model_name, spacy_model_name)
             except Exception as e_dl:
-                logger.error(f"Failed to download or initialize spaCy model: {e_dl}")
+                logger.error(f"Failed to download or initialize spaCy model after download attempt: {e_dl}", exc_info=True)
                 self.nlp = None
         except Exception as e:
-            logger.error(f"Error initializing spaCy: {e}")
+            logger.error(f"An unexpected error occurred during spaCy initialization: {e}", exc_info=True)
             self.nlp = None
             
         # If spaCy still couldn't be loaded, log a warning and proceed without it
         if not self.nlp:
             logger.warning("spaCy could not be loaded. Some features may be limited.")
-        
-        # Configure chunking parameters
-        self.chunk_size = chunk_size
-        self.stride = stride
-        
+
         # Define PII entity types and their regex patterns (if applicable)
         # Confidence scores here are base scores, can be adjusted by source (BERT, spaCy, regex)
         self.pii_definitions = {
@@ -608,419 +552,199 @@ class NLPModel:
             "chunk_count": len(chunks)
         }
         
-    def detect_pii(self, text: str, chunk_size: int, stride: int) -> List[Dict[str, Any]]:
+    def _run_bert_ner(self, chunks: List[str], chunk_size: int, stride: int) -> List[Dict[str, Any]]:
+        """Runs the BERT NER pipeline on text chunks and returns found entities."""
+        bert_pii_entities = []
+        if not self.ner_pipeline:
+            return bert_pii_entities
+
+        logger.info(f"Running BERT NER on {len(chunks)} chunks...")
+        try:
+            bert_results = self.ner_pipeline(chunks)
+            for i, chunk_result in enumerate(bert_results):
+                chunk_start_offset = i * (chunk_size - stride)
+                for entity in chunk_result:
+                    bert_pii_entities.append({
+                        "entity_type": entity["entity_group"],
+                        "value": entity["word"],
+                        "start": entity["start"] + chunk_start_offset,
+                        "end": entity["end"] + chunk_start_offset,
+                        "confidence": entity["score"],
+                        "source": "bert_ner"
+                    })
+            logger.info(f"BERT NER found {len(bert_pii_entities)} potential PII entities.")
+        except Exception as e:
+            logger.error(f"Error during BERT NER processing: {e}")
+        return bert_pii_entities
+
+    def _run_spacy_ner(self, text: str) -> List[Dict[str, Any]]:
+        """Runs the spaCy NER pipeline and returns found entities."""
+        spacy_pii_entities = []
+        if not self.nlp:
+            return spacy_pii_entities
+
+        logger.info("Running spaCy NER...")
+    def _run_bert_ner(self, chunks: List[str], original_text: str) -> List[Dict[str, Any]]:
+        """Runs the BERT NER pipeline on chunks and maps entities back to original text."""
+        if not self.ner_pipeline:
+            logger.warning("BERT NER pipeline not available. Skipping BERT NER.")
+            return []
+
+        bert_pii_entities = []
+        logger.info(f"Running BERT NER on {len(chunks)} chunks.")
+        
+        # Find chunk start positions in the original text to calculate absolute offsets
+        chunk_offsets = []
+        last_pos = 0
+        for chunk in chunks:
+            try:
+                # Find the start of the chunk in the original text, starting from the last position
+                start_pos = original_text.index(chunk, last_pos)
+                chunk_offsets.append(start_pos)
+                last_pos = start_pos + 1 # Move search start to after the beginning of the found chunk
+            except ValueError:
+                # This can happen if chunking logic modifies the text (e.g. joins sentences with space)
+                logger.warning("Could not perfectly align a chunk with original text. Entity offsets may be approximate for this chunk.")
+                chunk_offsets.append(last_pos) # Fallback to last known position
+
+        try:
+            # Process all chunks in a batch
+            ner_results = self.ner_pipeline(chunks)
+
+            for i, chunk_result in enumerate(ner_results):
+                chunk_offset = chunk_offsets[i]
+                for entity in chunk_result:
+                    bert_pii_entities.append({
+                        "entity_type": self.pii_definitions.get(entity['entity_group'], {}).get("label", entity['entity_group']),
+                        "value": entity['word'],
+                        "start": chunk_offset + entity['start'],
+                        "end": chunk_offset + entity['end'],
+                        "confidence": round(entity['score'], 4),
+                        "source": "bert_ner"
+                    })
+            logger.info(f"BERT NER found {len(bert_pii_entities)} potential PII entities.")
+        except Exception as e:
+            logger.error(f"Error during BERT NER processing: {e}", exc_info=True)
+            
+        return bert_pii_entities
+
+    def _run_spacy_ner(self, text: str) -> List[Dict[str, Any]]:
+        """Runs the spaCy NER pipeline on the full text to find entities."""
+        if not self.nlp:
+            logger.warning("spaCy pipeline not available. Skipping spaCy NER.")
+            return []
+
+        spacy_pii_entities = []
+        logger.info("Running spaCy NER...")
+        try:
+            doc = self.nlp(text)
+            for ent in doc.ents:
+                # Use a broader set of labels from spaCy's default NER
+                if ent.label_ in self.pii_definitions or ent.label_ in ["PERSON", "ORG", "GPE", "DATE", "MONEY", "NORP", "FAC", "LOC"]:
+                    spacy_pii_entities.append({
+                        "entity_type": self.pii_definitions.get(ent.label_, {}).get("label", ent.label_),
+                        "value": ent.text,
+                        "start": ent.start_char,
+                        "end": ent.end_char,
+                        "confidence": 1.0,  # spaCy rule-based/statistical entities are given high confidence
+                        "source": "spacy_ner"
+                    })
+            logger.info(f"spaCy NER found {len(spacy_pii_entities)} potential PII entities.")
+        except Exception as e:
+            logger.error(f"Error during spaCy NER processing: {e}", exc_info=True)
+        return spacy_pii_entities
+
+    def detect_pii(self, text: str, chunk_size: int = DEFAULT_CHUNK_SIZE, stride: int = DEFAULT_STRIDE) -> List[Dict[str, Any]]:
         """
         Detect PII entities in text using multiple NER approaches (BERT, spaCy).
         
         Args:
-            text: Input text to analyze for PII entities
+            text: Input text to analyze for PII entities.
             chunk_size: Maximum size of each chunk.
             stride: Overlap between chunks.
             
         Returns:
-            List of PII entities with type, value, position, and confidence
+            List of PII entities with type, value, position, and confidence.
         """
-        import time
-        import re
-        from tqdm import tqdm
-        
-        start_time = time.time()
-        if not text or not text.strip():
-            logger.info("Empty text provided for PII detection.")
+        if not text.strip():
             return []
-            
-        # Create a working array to collect all entities
-        collected_entities = []
-        
-        # 1. BERT NER approach
-        if self.ner_pipeline is not None:
-            try:
-                logger.info("Starting BERT NER PII detection...")
-                # Split the text into manageable chunks for BERT
-                chunks = self._chunk_text_by_sentences(text, chunk_size=chunk_size, stride=stride)
-                logger.debug(f"Split text into {len(chunks)} chunks for BERT NER")
-                
-                if not chunks:
-                    logger.info("No chunks generated for BERT NER processing.")
-                    return []
-                
-                # Map of BERT entity types to our PII categories
-                bert_to_pii_map = {
-                    'PERSON': 'PERSON',
-                    'PER': 'PERSON',
-                    'B-PER': 'PERSON',
-                    'I-PER': 'PERSON',
-                    'ORG': 'ORGANIZATION',
-                    'ORGANIZATION': 'ORGANIZATION',
-                    'B-ORG': 'ORGANIZATION',
-                    'I-ORG': 'ORGANIZATION',
-                    'LOC': 'LOCATION',
-                    'LOCATION': 'LOCATION',
-                    'B-LOC': 'LOCATION',
-                    'I-LOC': 'LOCATION',
-                    'GPE': 'GPE',
-                    'MISC': 'MISC',
-                    'B-MISC': 'MISC',
-                    'I-MISC': 'MISC',
-                    # Add other mappings as needed
-                }
-                
-                # Process each chunk with NER
-                current_doc_search_offset = 0
-                # Use tqdm for progress tracking
-                total_chunks = len(chunks)
-                logger.info(f"Processing {total_chunks} text chunks with BERT NER")
-                for i, chunk in enumerate(tqdm(chunks, desc="BERT NER Processing", unit="chunk", leave=True)):
-                    current_chunk_text = chunk
-                    try:
-                        # Process the chunk with BERT NER
-                        chunk_bert_entities = self.ner_pipeline(current_chunk_text)
-                        logger.debug(f"BERT NER found {len(chunk_bert_entities)} entities in chunk {i+1}/{len(chunks)}")
-                        
-                        # Find the actual offset of this chunk in the original text
-                        # This is necessary because chunking might change the exact text
-                        chunk_actual_start_in_doc = text.find(current_chunk_text, current_doc_search_offset)
-                        
-                        if chunk_actual_start_in_doc == -1:
-                            # Fallback: if not found from search offset, try from beginning
-                            chunk_actual_start_in_doc = text.find(current_chunk_text)
-                            if chunk_actual_start_in_doc == -1:
-                                logger.warning(f"Could not locate chunk {i+1}/{len(chunks)} in original text. Skipping entities for this chunk.")
-                                continue
-                        
-                        # Process each entity in the chunk
-                        for bert_entity in chunk_bert_entities:
-                            # Handle different NER model output formats
-                            entity_type = None
-                            entity_score = 0.0
-                            entity_word = None
-                            entity_start = 0
-                            entity_end = 0
-                            
-                            # Extract entity type with fallbacks for different model outputs
-                            if 'entity_group' in bert_entity:
-                                entity_type = bert_entity['entity_group']
-                            elif 'entity' in bert_entity:
-                                entity_type = bert_entity['entity']
-                            elif 'type' in bert_entity:
-                                entity_type = bert_entity['type']
-                            else:
-                                logger.warning(f"Unknown BERT NER entity format (no entity type): {bert_entity}")
-                                continue
-                                
-                            # Extract score with fallbacks
-                            if 'score' in bert_entity:
-                                entity_score = bert_entity['score']
-                            elif 'confidence' in bert_entity:
-                                entity_score = bert_entity['confidence']
-                            else:
-                                logger.warning(f"No confidence score in entity: {bert_entity}, using default 0.7")
-                                entity_score = 0.7  # Default confidence
-                            
-                            # Extract text value with fallbacks
-                            if 'word' in bert_entity:
-                                entity_word = bert_entity['word']
-                            elif 'text' in bert_entity:
-                                entity_word = bert_entity['text']
-                            else:
-                                logger.warning(f"No word/text in entity: {bert_entity}, will extract from position")
-                                
-                            # Extract position with fallbacks
-                            if 'start' in bert_entity and 'end' in bert_entity:
-                                entity_start = bert_entity['start']
-                                entity_end = bert_entity['end']
-                            elif 'start_pos' in bert_entity and 'end_pos' in bert_entity:
-                                entity_start = bert_entity['start_pos']
-                                entity_end = bert_entity['end_pos']
-                            else:
-                                logger.warning(f"No position info in entity: {bert_entity}, skipping")
-                                continue
-                                        
-                            # Skip 'O' (Outside) entities
-                            if entity_type == 'O':
-                                continue
-                                
-                            pii_key = bert_to_pii_map.get(entity_type)
-                            if pii_key and pii_key in self.pii_definitions:
-                                definition = self.pii_definitions[pii_key]
-                                entity_abs_start = chunk_actual_start_in_doc + entity_start
-                                entity_abs_end = chunk_actual_start_in_doc + entity_end
-                                
-                                # Get entity value either from the model or from the text using position
-                                if entity_word and chunk_actual_start_in_doc >= 0:
-                                    entity_value = entity_word
-                                else:
-                                    entity_value = text[entity_abs_start:entity_abs_end]
-                                    
-                                entity_data = {
-                                    "type": definition["label"],
-                                    "value": entity_value,
-                                    "start": entity_abs_start,
-                                    "end": entity_abs_end,
-                                    "confidence": definition["confidence"],
-                                    "model_score": float(entity_score),
-                                    "source": "bert_ner"
-                                }
-                                logger.debug(f"BERT NER detected {entity_data['type']}: '{entity_data['value']}' with confidence {entity_data['model_score']:.2f}")
-                                collected_entities.append(entity_data)
-                        
-                        # Advance search offset for the next chunk
-                        current_doc_search_offset = chunk_actual_start_in_doc + 1 # Start search for next chunk after the beginning of this one
-                    except Exception as e:
-                        logger.error(f"Error processing chunk {i+1}/{len(chunks)}: {str(e)}", exc_info=True)
-                        continue
-            except Exception as e:
-                logger.error(f"Error in BERT NER processing: {str(e)}", exc_info=True)
-        else:
-            logger.info("BERT NER pipeline not available. Skipping BERT PII detection.")
 
-        # 2. spaCy NER Processing (Custom Patterns + Default NER)
-        if self.nlp is not None:
-            try:
-                logger.info("Starting spaCy NER processing")
-                # Track progress for spaCy processing
-                spacy_start_time = time.time()
-                
-                # Check if the spaCy model has necessary components
-                if not self.nlp.has_pipe("ner"):
-                    logger.warning("spaCy model missing NER component. Entity detection will be limited.")
-                    # Try to add the NER component if possible
-                    try:
-                        self.nlp.add_pipe("ner")
-                        logger.info("Added NER component to spaCy pipeline")
-                    except Exception as e:
-                        logger.error(f"Could not add NER component to spaCy pipeline: {e}")
-                
-                # Process with spaCy (consider using multi-processing for large text)
-                logger.debug("Processing text with spaCy NLP")
-                doc = self.nlp(text)
-                
-                # Count entities for logging
-                entity_count = len(doc.ents)
-                logger.info(f"spaCy identified {entity_count} entities in the text")
-                
-                # Add standard regex patterns for common PII formats if few entities found
-                if entity_count < 2:
-                    logger.info("Few entities detected by spaCy, adding regex pattern matching")
-                    # Run regex matching for common patterns (emails, phone numbers, SSNs)
-                    text_lower = text.lower()
-                    
-                    # Simple regex for email detection
-                    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-                    for match in re.finditer(email_pattern, text):
-                        entity_data = {
-                            "type": "EMAIL",
-                            "value": match.group(),
-                            "start": match.start(),
-                            "end": match.end(),
-                            "confidence": 0.9,  # High confidence for regex pattern match
-                            "source": "regex_pattern"
-                        }
-                        logger.info(f"Regex detected EMAIL: '{entity_data['value']}'")
-                        collected_entities.append(entity_data)
-                    
-                    # Simple regex for phone number detection (US format)
-                    phone_pattern = r'\(\d{3}\)\s*\d{3}[-\s]?\d{4}|\d{3}[-\s]?\d{3}[-\s]?\d{4}'
-                    for match in re.finditer(phone_pattern, text):
-                        entity_data = {
-                            "type": "PHONE_NUMBER",
-                            "value": match.group(),
-                            "start": match.start(),
-                            "end": match.end(),
-                            "confidence": 0.9,
-                            "source": "regex_pattern"
-                        }
-                        logger.info(f"Regex detected PHONE_NUMBER: '{entity_data['value']}'")
-                        collected_entities.append(entity_data)
-                
-                # Process entities identified by spaCy
-                for ent in doc.ents:
-                    pii_key = None
-                    # Debug each entity
-                    logger.debug(f"spaCy entity found: {ent.text} - Label: {ent.label_}")
-                    
-                    # ent.label_ could be a direct key from pii_definitions or a standard spaCy label
-                    if ent.label_ in self.pii_definitions:
-                        pii_key = ent.label_
-                    else:
-                        # Enhanced mapping of standard spaCy labels
-                        spacy_label_upper = ent.label_.upper()
-                        if spacy_label_upper in ['PERSON', 'PER'] and 'PERSON' in self.pii_definitions: 
-                            pii_key = 'PERSON'
-                        elif spacy_label_upper in ['ORG', 'ORGANIZATION'] and 'ORG' in self.pii_definitions: 
-                            pii_key = 'ORG'
-                        elif spacy_label_upper in ['GPE', 'LOC', 'FAC', 'LOCATION'] and 'GPE' in self.pii_definitions: 
-                            pii_key = 'GPE'
-                        elif spacy_label_upper in ['DATE', 'TIME'] and 'DATE' in self.pii_definitions: 
-                            pii_key = 'DATE'
-                        elif 'MISC' in self.pii_definitions and ent.text.strip():
-                            # Catch-all for any other entity type that has text
-                            pii_key = 'MISC'
+        logger.info(f"Starting PII detection on text of length {len(text)}.")
+        start_time = time.time()
 
-                    if pii_key:
-                        definition = self.pii_definitions[pii_key]
-                        
-                        # Use a lower confidence threshold for initial detection
-                        # We'll filter by confidence later if needed
-                        confidence_threshold = 0.6  # Lower threshold to catch more potential entities
-                        
-                        entity_data = {
-                            "type": definition["label"],
-                            "value": ent.text,
-                            "start": ent.start_char,
-                            "end": ent.end_char,
-                            "confidence": max(confidence_threshold, definition.get("confidence", 0.6)),
-                            "source": "spacy_ner"
-                        }
-                        logger.info(f"spaCy detected {entity_data['type']}: '{entity_data['value']}' with confidence {entity_data['confidence']:.2f}")
-                        collected_entities.append(entity_data)
-                
-                # If still no entities found, try a different approach
-                if not collected_entities:
-                    logger.warning("No entities detected with standard spaCy processing, attempting alternative approaches")
-                    # Log some text sample for debugging
-                    sample = text[:200] + '...' if len(text) > 200 else text
-                    logger.debug(f"No PII found despite processing {len(chunks)} chunks. Text sample: '{sample}'")
-                    
-            except Exception as e:
-                logger.error(f"Error during spaCy NER processing: {e}", exc_info=True)
-        else:
-            logger.info("spaCy model not available. Skipping spaCy PII detection.")
+        chunks = self._chunk_text_by_sentences(text, chunk_size, stride)
 
-        # 3. Deduplication and consolidation with lower thresholds
-        if collected_entities:
-            logger.info(f"Starting deduplication and filtering of {len(collected_entities)} raw PII detections")
-            dedup_start_time = time.time()
-            
-            # Lower the confidence threshold for initial collection to ensure we catch more entities
-            minimum_confidence = 0.5  # Lower threshold to catch more potential entities
-            
-            # Filter by minimum confidence but be lenient
-            collected_entities = [e for e in collected_entities if 
-                                e.get('model_score', e.get('confidence', 0)) >= minimum_confidence]
-            
-            logger.info(f"After confidence filtering ({minimum_confidence}), {len(collected_entities)} entities remain")
-            
-            # Show progress for deduplication
-            if len(collected_entities) > 100:
-                collected_entities_iter = tqdm(collected_entities, desc="Deduplicating entities", unit="entity")
+        # --- Run NER Pipelines ---
+        bert_pii_entities = self._run_bert_ner(chunks, text)
+        spacy_pii_entities = self._run_spacy_ner(text)
+
+        # --- Merge and Filter PII ---
+        all_pii_entities = bert_pii_entities + spacy_pii_entities
+        logger.info(f"Collected {len(all_pii_entities)} raw entities from all NER sources.")
+
+        merged_entities = self._merge_and_deduplicate_pii(all_pii_entities)
+        logger.info(f"Found {len(merged_entities)} entities after merging and deduplication.")
+
+        final_entities = self._filter_false_positives(merged_entities)
+        logger.info(f"PII detection finished. Found {len(final_entities)} unique PII entities after filtering.")
+
+        processing_time = time.time() - start_time
+        logger.info(f"PII detection completed in {processing_time:.2f} seconds.")
+
+        return final_entities
+
+    def _merge_and_deduplicate_pii(self, pii_entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Sorts and deduplicates overlapping PII entities based on position and confidence."""
+        if not pii_entities:
+            return []
+
+        # Sort by start position, then by confidence score descending for tie-breaking
+        pii_entities.sort(key=lambda x: (x['start'], -x.get('confidence', 0.0)))
+
+        deduplicated_entities = []
+        if not pii_entities:
+            return []
+
+        current_entity = pii_entities[0]
+
+        for next_entity in pii_entities[1:]:
+            # Check for overlap: if next entity starts before current one ends
+            if next_entity['start'] < current_entity['end']:
+                # Overlap detected, decide which one to keep
+                # Prioritize higher confidence
+                if next_entity.get('confidence', 0.0) > current_entity.get('confidence', 0.0):
+                    current_entity = next_entity  # Replace with higher confidence entity
+                # If confidence is same, prioritize the longer entity
+                elif (next_entity.get('confidence', 0.0) == current_entity.get('confidence', 0.0) and
+                      (next_entity['end'] - next_entity['start']) > (current_entity['end'] - current_entity['start'])):
+                    current_entity = next_entity  # Replace with longer entity
             else:
-                collected_entities_iter = collected_entities
-                
-            # Sort by start position and then by length (longer matches first)
-            collected_entities.sort(key=lambda e: (e['start'], -(e['end'] - e['start'])))
-            
-            unique_entities_tracker = set()
-            final_pii_entities = []
-            
-            # First pass: Remove exact duplicates but be more lenient with what's considered a duplicate
-            for entity in collected_entities_iter:
-                # Normalize the entity value by removing excess whitespace and lowercasing
-                normalized_value = ' '.join(entity['value'].lower().split())
-                
-                # Create a more flexible entity key that doesn't require exact position matches
-                # This helps catch entities that might be detected slightly differently by different models
-                entity_key = (normalized_value, entity['type'])
-                
-                # For exact position duplicates, use a more stringent key
-                exact_key = (normalized_value, entity['start'], entity['end'], entity['type'])
-                
-                if exact_key not in unique_entities_tracker:
-                    # For fuzzy matching, we look at the value and type, not position
-                    # But we need to check if this entity overlaps with any existing one
-                    is_duplicate = False
-                    
-                    for existing in final_pii_entities:
-                        existing_norm = ' '.join(existing['value'].lower().split())
-                        
-                        # Check for significant overlap in text or position
-                        text_similar = normalized_value in existing_norm or existing_norm in normalized_value
-                        position_overlap = (entity['start'] < existing['end'] and entity['end'] > existing['start'])
-                        
-                        if text_similar and position_overlap and entity['type'] == existing['type']:
-                            is_duplicate = True
-                            
-                            # If duplicate but higher confidence, replace the existing one
-                            entity_conf = entity.get('model_score', entity.get('confidence', 0))
-                            existing_conf = existing.get('model_score', existing.get('confidence', 0))
-                            
-                            if entity_conf > existing_conf:
-                                final_pii_entities.remove(existing)
-                                final_pii_entities.append(entity)
-                                logger.debug(f"Replaced {existing['type']}: '{existing['value']}' with higher confidence entity: '{entity['value']}'")
-                            break
-                    
-                    if not is_duplicate:
-                        final_pii_entities.append(entity)
-                        unique_entities_tracker.add(exact_key)  # Track exact matches
-        else:
-            final_pii_entities = []
-            
-        # Track processing times for performance monitoring
+                # No overlap, add the current entity to our list and move to the next one
+                deduplicated_entities.append(current_entity)
+                current_entity = next_entity
         
+        # Add the last processed entity
+        deduplicated_entities.append(current_entity)
 
-        
-        # Calculate processing times
-        total_time = time.time() - start_time
-        
-        # Only calculate component times if we have the markers
-        if 'dedup_start_time' in locals():
-            dedup_time = time.time() - dedup_start_time
-        else:
-            dedup_time = 0
-            
-        if 'spacy_start_time' in locals():
-            spacy_time = dedup_start_time - spacy_start_time if 'dedup_start_time' in locals() else time.time() - spacy_start_time
-            bert_time = spacy_start_time - start_time
-        else:
-            spacy_time = 0
-            bert_time = total_time
-        
-        processing_times = {
-            "bert_ner_time": bert_time,
-            "spacy_time": spacy_time,
-            "deduplication_time": dedup_time,
-            "total_time": total_time
-        }
-        
-        logger.info(f"After deduplication, {len(final_pii_entities)} unique entities remain")
-        logger.debug(f"PII detection timing: BERT: {processing_times['bert_ner_time']:.2f}s, SpaCy: {processing_times['spacy_time']:.2f}s, Dedup: {processing_times['deduplication_time']:.2f}s, Total: {processing_times['total_time']:.2f}s")
-        
-        # Enhanced logging of remaining entities
-        if final_pii_entities:
-            logger.debug("Remaining PII entities after deduplication:")
-            for i, entity in enumerate(final_pii_entities, 1):
-                conf = entity.get('model_score', entity.get('confidence', 0))
-                logger.debug(f"  {i}. {entity['type']}: '{entity['value']}' (Conf: {conf:.2f}, Start: {entity['start']}, End: {entity['end']})")
+        return deduplicated_entities
 
-        
-        # Log detailed information about detected PII
-        if final_pii_entities:
-            logger.info(f"Detected {len(final_pii_entities)} unique PII entities:")
-            for i, entity in enumerate(final_pii_entities, 1):
-                source = entity.get('source', 'unknown')
-                conf = entity.get('model_score', entity.get('confidence', 1.0))
-                logger.info(f"  {i}. {entity['type']}: '{entity['value']}' (Confidence: {conf:.2f}, Source: {source})")
-        else:
-            logger.info("No PII entities detected in the provided text")
-            
-        # If no PII was found but we had chunks, log a sample of the text for debugging
-        if not final_pii_entities and 'chunks' in locals():
-            sample = text[:200] + '...' if len(text) > 200 else text
-            logger.debug(f"No PII found despite processing {len(chunks)} chunks. Text sample: '{sample}'")
-        
-        # Log performance metrics
-        chars_per_second = len(text) / total_time if total_time > 0 else 0
-        logger.info(f"PII detection complete: {len(text)} chars processed at {int(chars_per_second)} chars/sec")
-            
-        return final_pii_entities
-    
-    def analyze_document(self, text: str, chunk_size: int, stride: int) -> Dict[str, Any]:
+    def _filter_false_positives(self, pii_entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Perform full document analysis for sensitive data using multicore parallelism.
+        Filters out likely false positive PII detections.
+        (Placeholder for more advanced filtering logic)
+        """
+        # Example: remove any detected 'PERSON' that is only one character long
+        return [
+            entity for entity in pii_entities
+            if not (entity.get('entity_type') == 'Person Name' and len(entity.get('value', '')) <= 2)
+        ]
+
+    def analyze_document(self, text: str, chunk_size: int = DEFAULT_CHUNK_SIZE, stride: int = DEFAULT_STRIDE) -> Dict[str, Any]:
+        """
+        Performs a full analysis of a document, including classification and PII detection.
         
         Args:
-            text: The input text to analyze for sensitive information.
+            text: The document text to analyze.
             chunk_size: Maximum size of each chunk.
             stride: Overlap between chunks.
             
@@ -1036,24 +760,9 @@ class NLPModel:
         import time
         start_time = time.time()
         
-        # Process classification and PII detection in parallel if text is large enough
-        # to benefit from parallel processing (avoids overhead for small texts)
-        if len(text) > 5000:  # Only parallelize for larger texts
-            logger.info(f"Large text detected ({len(text)} chars), using parallel processing")
-            
-            from concurrent.futures import ThreadPoolExecutor
-            with ThreadPoolExecutor(max_workers=2) as executor:
-                # Submit both tasks to be executed in parallel
-                classify_future = executor.submit(self.classify_document, text, chunk_size=chunk_size, stride=stride)
-                pii_future = executor.submit(self.detect_pii, text, chunk_size=chunk_size, stride=stride)
-                
-                # Get results as they complete
-                classification = classify_future.result()
-                pii_entities = pii_future.result()
-        else:
-            # For smaller texts, sequential is more efficient
-            classification = self.classify_document(text, chunk_size=chunk_size, stride=stride)
-            pii_entities = self.detect_pii(text, chunk_size=chunk_size, stride=stride)
+        # For smaller texts, sequential is more efficient
+        classification = self.classify_document(text, chunk_size=chunk_size, stride=stride)
+        pii_entities = self.detect_pii(text, chunk_size=chunk_size, stride=stride)
         
         # Calculate processing statistics
         processing_time = time.time() - start_time
@@ -1083,7 +792,7 @@ class NLPModel:
                 "text_length": len(text),
                 "processing_time_seconds": round(processing_time, 3),
                 "chars_per_second": int(chars_per_second),
-                "parallel_processing": len(text) > 5000
+                "parallel_processing": False # Disabled parallel processing for simplicity for now
             }
         }
         
@@ -1092,3 +801,63 @@ class NLPModel:
                    f"Found {len(pii_entities)} PII entities with sensitivity score {sensitivity_score:.2f}")
         
         return result
+
+
+if __name__ == '__main__':
+    # Configure logging for standalone testing
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    logger.info("--- Running NLPModel Standalone Test ---")
+    
+    # Initialize the model
+    # This might take a moment to download models on first run
+    try:
+        nlp_model = NLPModel()
+        
+        # --- Test Case 1: Text with various PII ---
+        test_text_1 = (
+            "John Doe, resident of 123 Main Street, Anytown, USA, can be reached at john.doe@email.com. "
+            "His phone number is (555) 123-4567. Please send the invoice to Jane Smith at "
+            "jane.smith@company.org. Her social security number is 987-65-4321. "
+            "The meeting is on 2023-10-27. My IP is 192.168.1.1."
+        )
+        
+        logger.info("\n--- Analyzing Test Case 1 ---")
+        analysis_result = nlp_model.analyze_document(test_text_1)
+        
+        import json
+        import numpy as np
+
+        # Helper function to convert NumPy types to native Python types
+        def convert_numpy_types(obj):
+            if isinstance(obj, np.integer):
+                return int(obj)
+            elif isinstance(obj, np.floating):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, dict):
+                return {k: convert_numpy_types(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_numpy_types(i) for i in obj]
+            return obj
+            
+        print("\n--- Analysis Results ---")
+        # Convert NumPy types before serializing to JSON
+        serializable_result = convert_numpy_types(analysis_result)
+        print(json.dumps(serializable_result, indent=2))
+
+        # --- Test Case 2: Simple text with no PII ---
+        test_text_2 = "The quick brown fox jumps over the lazy dog."
+        logger.info("\n--- Analyzing Test Case 2 ---")
+        analysis_result_2 = nlp_model.analyze_document(test_text_2)
+        print("\n--- Analysis Results (No PII) ---")
+        print(json.dumps(analysis_result_2, indent=2))
+        assert analysis_result_2['pii_count'] == 0, "Should not find PII in simple text"
+        print("\nTest Case 2 passed: No PII found as expected.")
+
+    except Exception as e:
+        logger.error(f"An error occurred during the standalone test: {e}", exc_info=True)
+
+    logger.info("--- NLPModel Standalone Test Finished ---")

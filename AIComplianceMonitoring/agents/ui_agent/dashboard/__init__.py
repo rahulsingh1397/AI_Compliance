@@ -3,7 +3,7 @@ from flask_login import login_required, current_user
 from flask_babel import _
 import json
 
-from ..models import db
+from AIComplianceMonitoring.agents.ui_agent.extensions import db
 
 dashboard_bp = Blueprint('dashboard', __name__)
 

@@ -273,6 +273,7 @@ class HumanInteractionAgent(FeedbackLoopBase):
             ]
             removed_count += original_len - len(self.review_queue[priority])
         
+        
         if removed_count > 0:
             self._save_review_queue()
             logger.info(f"Removed {removed_count} items older than {max_age_days} days from review queue")

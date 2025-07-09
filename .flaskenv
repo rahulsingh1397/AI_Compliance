@@ -1,2 +1,2 @@
-FLASK_APP=wsgi:app
+FLASK_APP=AIComplianceMonitoring.agents.ui_agent.app:create_app
 FLASK_DEBUG=1

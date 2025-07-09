@@ -26,6 +26,7 @@ import os.path
 # Add the root directory to sys.path to allow proper imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
 from AIComplianceMonitoring.agents.base_agent import BaseAgent, BaseAgentConfig
+from AIComplianceMonitoring.agents.monitoring.compliance_checker import ComplianceChecker
 
 # Configure structured logging
 logger = logging.getLogger(__name__)
@@ -85,7 +86,8 @@ class MonitoringAgent(BaseAgent):
                  config: Optional[MonitoringAgentConfig] = None,
                  log_ingestion_module: Optional[Any] = None,
                  anomaly_detection_module: Optional[Any] = None,
-                 alert_module: Optional[Any] = None):
+                 alert_module: Optional[Any] = None,
+                 compliance_checker_module: Optional[Any] = None):
         """
         Initialize the Monitoring Agent with dependency injection.
         
@@ -119,6 +121,7 @@ class MonitoringAgent(BaseAgent):
             self.log_ingestion_module = log_ingestion_module or LogIngestionModule(self.config)
             self.anomaly_detection_module = anomaly_detection_module or AnomalyDetectionModule(self.config)
             self.alert_module = alert_module or AlertModule(self.config)
+            self.compliance_checker_module = compliance_checker_module or ComplianceChecker(self.config)
 
         except ImportError as e:
             logger.error(f"Failed to import required modules: {str(e)}")
@@ -227,20 +230,39 @@ class MonitoringAgent(BaseAgent):
                 logger.info(f"No new logs from source: {source_type} - {source_config.get('name', 'unnamed')}")
                 return {"status": "success", "message": "No new logs", "alert_count": 0}
             
+            # Perform compliance checks
+            logs_df_with_compliance = self._execute_with_retry(
+                self.compliance_checker_module.check_compliance,
+                logs_df
+            )
+
+            # Separate compliance breaches and mark them as high-priority anomalies
+            compliance_breaches_df = logs_df_with_compliance[logs_df_with_compliance['compliance_breach'] == True].copy()
+            if not compliance_breaches_df.empty:
+                compliance_breaches_df['anomaly_score'] = 1.0  # Max score for compliance breaches
+                compliance_breaches_df['anomaly_model'] = 'compliance_checker'
+                logger.warning(f"Identified {len(compliance_breaches_df)} compliance breaches.")
+
             # Detect anomalies in the logs
             anomalies_df = self._execute_with_retry(
                 self.anomaly_detection_module.detect_anomalies,
-                logs_df
+                logs_df # Use original logs_df for anomaly detection
             )
             
+            # Combine anomalies and compliance breaches for alerting
             if anomalies_df is None or anomalies_df.empty:
-                logger.info(f"No anomalies detected in logs from: {source_type} - {source_config.get('name', 'unnamed')}")
-                return {"status": "success", "message": "No anomalies detected", "alert_count": 0}
-            
-            # Generate alerts for the detected anomalies
+                all_alerts_df = compliance_breaches_df
+            else:
+                all_alerts_df = pd.concat([anomalies_df, compliance_breaches_df], ignore_index=True)
+
+            if all_alerts_df.empty:
+                logger.info(f"No anomalies or compliance breaches detected in logs from: {source_type} - {source_config.get('name', 'unnamed')}")
+                return {"status": "success", "message": "No anomalies or breaches detected", "alert_count": 0}
+
+            # Generate alerts for all detected issues
             alert_results = self._execute_with_retry(
                 self.alert_module.generate_alerts,
-                anomalies_df,
+                all_alerts_df,
                 source_type,
                 source_config
             )

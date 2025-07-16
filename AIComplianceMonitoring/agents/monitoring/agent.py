@@ -27,6 +27,7 @@ import os.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
 from AIComplianceMonitoring.agents.base_agent import BaseAgent, BaseAgentConfig
 from AIComplianceMonitoring.agents.monitoring.compliance_checker import ComplianceChecker
+from AIComplianceMonitoring.agents.remediation.integration import RemediationIntegration, RemediationIntegrationConfig
 
 # Configure structured logging
 logger = logging.getLogger(__name__)
@@ -66,6 +67,9 @@ class MonitoringAgentConfig(BaseAgentConfig):
     })
     alert_batch_size: int = 100
     alert_db_retention_days: int = 90  # Store alerts for 90 days
+    
+    # Remediation configurations
+    enable_remediation: bool = True  # Flag to enable/disable automated remediation
 
     class Config:
         arbitrary_types_allowed = True
@@ -87,7 +91,8 @@ class MonitoringAgent(BaseAgent):
                  log_ingestion_module: Optional[Any] = None,
                  anomaly_detection_module: Optional[Any] = None,
                  alert_module: Optional[Any] = None,
-                 compliance_checker_module: Optional[Any] = None):
+                 compliance_checker_module: Optional[Any] = None,
+                 remediation_module: Optional[Any] = None):
         """
         Initialize the Monitoring Agent with dependency injection.
         
@@ -117,11 +122,26 @@ class MonitoringAgent(BaseAgent):
             from AIComplianceMonitoring.agents.monitoring.alert_module import AlertModule
             logger.debug("AlertModule imported successfully")
 
+            # Initialize compliance checker module
+            if compliance_checker_module is None:
+                logger.debug("Initializing ComplianceChecker...")
+                from AIComplianceMonitoring.agents.monitoring.compliance_checker import ComplianceChecker
+                self.compliance_checker_module = ComplianceChecker(config={})
+            else:
+                self.compliance_checker_module = compliance_checker_module
+                
+            # Initialize the remediation module
+            if remediation_module is None:
+                logger.debug("Initializing RemediationIntegration...")
+                remediation_config = RemediationIntegrationConfig(enabled=self.config.enable_remediation)
+                self.remediation_module = RemediationIntegration(config=remediation_config)
+            else:
+                self.remediation_module = remediation_module
+                
             # Initialize components with dependency injection
             self.log_ingestion_module = log_ingestion_module or LogIngestionModule(self.config)
             self.anomaly_detection_module = anomaly_detection_module or AnomalyDetectionModule(self.config)
             self.alert_module = alert_module or AlertModule(self.config)
-            self.compliance_checker_module = compliance_checker_module or ComplianceChecker(self.config)
 
         except ImportError as e:
             logger.error(f"Failed to import required modules: {str(e)}")
@@ -208,7 +228,7 @@ class MonitoringAgent(BaseAgent):
             logger.error(error_msg)
             return {"status": "error", "message": error_msg}
     
-    def _monitor_source(self, source_type: str, source_config: Dict[str, Any]):
+    def _monitor_source(self, source_type: str, source_config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Monitor a specific log source.
         
@@ -216,48 +236,22 @@ class MonitoringAgent(BaseAgent):
             source_type: Type of the source (aws_s3, azure_blob, on_prem)
             source_config: Configuration for the source
         """
-        logger.info(f"Monitoring source: {source_type} - {source_config.get('name', 'unnamed')}")
-        
         try:
-            # Ingest logs from the source
-            logs_df = self._execute_with_retry(
-                self.log_ingestion_module.ingest_logs,
-                source_type,
-                source_config
-            )
+            logger.info(f"Monitoring source: {source_type} - {source_config.get('name', 'unnamed')}")
             
-            if logs_df is None or logs_df.empty:
-                logger.info(f"No new logs from source: {source_type} - {source_config.get('name', 'unnamed')}")
-                return {"status": "success", "message": "No new logs", "alert_count": 0}
+            # Get logs from the source
+            logs = self.log_ingestion_module.ingest_logs(source_type, source_config)
             
-            # Perform compliance checks
-            logs_df_with_compliance = self._execute_with_retry(
-                self.compliance_checker_module.check_compliance,
-                logs_df
-            )
-
-            # Separate compliance breaches and mark them as high-priority anomalies
-            compliance_breaches_df = logs_df_with_compliance[logs_df_with_compliance['compliance_breach'] == True].copy()
-            if not compliance_breaches_df.empty:
-                compliance_breaches_df['anomaly_score'] = 1.0  # Max score for compliance breaches
-                compliance_breaches_df['anomaly_model'] = 'compliance_checker'
-                logger.warning(f"Identified {len(compliance_breaches_df)} compliance breaches.")
-
-            # Detect anomalies in the logs
-            anomalies_df = self._execute_with_retry(
-                self.anomaly_detection_module.detect_anomalies,
-                logs_df # Use original logs_df for anomaly detection
-            )
+            if not logs or logs.empty:
+                logger.info(f"No logs found for source {source_type}")
+                return {
+                    "status": "success", 
+                    "message": "No logs found", 
+                    "source_type": source_type,
+                    "source_name": source_config.get("name", "unnamed")
+                }
             
-            # Combine anomalies and compliance breaches for alerting
-            if anomalies_df is None or anomalies_df.empty:
-                all_alerts_df = compliance_breaches_df
-            else:
-                all_alerts_df = pd.concat([anomalies_df, compliance_breaches_df], ignore_index=True)
-
-            if all_alerts_df.empty:
-                logger.info(f"No anomalies or compliance breaches detected in logs from: {source_type} - {source_config.get('name', 'unnamed')}")
-                return {"status": "success", "message": "No anomalies or breaches detected", "alert_count": 0}
+            logger.info(f"Found {len(logs)} log entries to process")
 
             # Generate alerts for all detected issues
             alert_results = self._execute_with_retry(
@@ -319,6 +313,8 @@ class MonitoringAgent(BaseAgent):
             ingestion_stats = self.log_ingestion_module.get_stats()
             detection_stats = self.anomaly_detection_module.get_stats()
             alert_stats = self.alert_module.get_stats()
+            compliance_stats = self.compliance_checker_module.get_stats() if self.compliance_checker_module else {}
+            remediation_stats = self.remediation_module.get_stats() if self.remediation_module else {'enabled': False}
             
             return {
                 "status": "success",
@@ -326,6 +322,8 @@ class MonitoringAgent(BaseAgent):
                     "ingestion": ingestion_stats,
                     "detection": detection_stats,
                     "alerts": alert_stats,
+                    "compliance": compliance_stats,
+                    "remediation": remediation_stats,
                     "timestamp": time.time()
                 }
             }

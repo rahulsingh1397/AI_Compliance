@@ -8,8 +8,7 @@ import time
 
 # Add project root to path to allow absolute imports
 import sys
-project_root = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(project_root))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from AIComplianceMonitoring.agents.monitoring.alert_module import AlertModule
 
@@ -17,7 +16,7 @@ class TestAlertModule(unittest.TestCase):
 
     def setUp(self):
         """Set up a temporary database and test data for each test."""
-        self.test_dir = Path('./test_temp_data')
+        self.test_dir = Path('./tests/test_results/alert_module_temp')
         self.db_dir = self.test_dir / 'db'
         self.db_dir.mkdir(parents=True, exist_ok=True)
         self.db_path = self.db_dir / 'test_alerts.db'

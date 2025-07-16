@@ -9,11 +9,12 @@ from typing import Dict, List, Any, Optional, Tuple
 import numpy as np
 from dataclasses import dataclass
 import hashlib
+import tenseal as ts
 
 @dataclass
 class ModelUpdate:
     """Container for model updates in federated learning."""
-    weights: Dict[str, np.ndarray]
+    weights: Dict[str, Any]  # Can be np.ndarray or ts.CKKSVector
     samples_count: int
     client_id: str
     metadata: Dict[str, Any] = None
@@ -36,14 +37,28 @@ class FederatedLearningManager:
         self.num_clients = num_clients
         self.clients: Dict[str, Dict] = {}
         self.round = 0
+
+        # Initialize FHE context (CKKS scheme for floating-point operations)
+        self.fhe_context = ts.context(
+            ts.SCHEME_TYPE.CKKS,
+            poly_modulus_degree=8192,
+            coeff_mod_bit_sizes=[60, 40, 40, 60]
+        )
+        self.fhe_context.global_scale = 2**40
+        self.fhe_context.generate_galois_keys()
         
     def add_client(self, client_id: str, metadata: Optional[Dict] = None) -> None:
         """
-        Register a new client in the federated learning system.
-        
+        Registers a new client in the federated learning system.
+
+        This method adds a client to the internal registry, allowing it to participate
+        in future federated learning rounds. Each client is tracked with its
+        metadata and participation history.
+
         Args:
-            client_id: Unique identifier for the client
-            metadata: Additional client metadata
+            client_id (str): A unique identifier for the client.
+            metadata (Optional[Dict]): A dictionary for storing arbitrary client
+                metadata, such as hardware specifications or location.
         """
         self.clients[client_id] = {
             'metadata': metadata or {},
@@ -53,11 +68,20 @@ class FederatedLearningManager:
     
     def get_global_model_weights(self) -> Dict[str, np.ndarray]:
         """
-        Get the current global model weights.
-        Handles both Keras-style models (get_weights) and scikit-learn models.
+        Retrieves the weights of the current global model.
+
+        This function is designed to be model-agnostic, supporting popular
+        frameworks by detecting the appropriate method for weight extraction.
+        Currently, it handles Keras models via `get_weights()` and scikit-learn
+        linear models by accessing `coef_` and `intercept_`.
 
         Returns:
-            Dictionary containing model weights
+            Dict[str, np.ndarray]: A dictionary where keys are layer/weight names
+            and values are the corresponding NumPy arrays of the weights.
+
+        Raises:
+            ValueError: If the model is of an unsupported type and its weights
+                cannot be extracted.
         """
         if hasattr(self.global_model, 'get_weights'):
             # Handle Keras-style models
@@ -75,41 +99,63 @@ class FederatedLearningManager:
         self, 
         updates: List[ModelUpdate],
         aggregation_method: str = 'fedavg'
-    ) -> Dict[str, np.ndarray]:
+    ) -> Dict[str, ts.CKKSVector]:
         """
-        Aggregate model updates from multiple clients.
-        
+        Aggregates model updates from multiple clients using FHE to form a new global model.
+
+        This function first verifies the integrity of each client update.
+        It then combines the verified updates (which are encrypted TenSEAL vectors)
+        using the specified aggregation strategy.
+
+        The default strategy is Federated Averaging ('fedavg'), where encrypted client
+        updates are multiplied by their plaintext weights (based on sample size)
+        and then summed together homomorphically.
+
         Args:
-            updates: List of model updates from clients
-            aggregation_method: Method to use for aggregation ('fedavg', 'fedprox', etc.)
-            
+            updates (List[ModelUpdate]): A list of model updates from clients,
+                where weights are encrypted TenSEAL vectors.
+            aggregation_method (str): The algorithm to use for aggregation.
+                Currently supports 'fedavg'. Defaults to 'fedavg'.
+
         Returns:
-            Aggregated model weights
+            Dict[str, ts.CKKSVector]: A dictionary containing the new, aggregated
+            model weights as encrypted TenSEAL vectors.
+
+        Raises:
+            ValueError: If no valid updates are provided after verification.
         """
         if not updates:
             return self.get_global_model_weights()
-            
+
         # Verify all updates before aggregation
         verified_updates = []
         total_samples = 0
-        
         for update in updates:
             if self._verify_update(update):
                 verified_updates.append(update)
                 total_samples += update.samples_count
-        
+
         if not verified_updates:
             raise ValueError("No valid updates to aggregate")
-            
-        # Perform weighted averaging of updates
+
+        # Perform weighted averaging of updates using FHE
         avg_weights = {}
-        for key in verified_updates[0].weights.keys():
-            weighted_sum = np.zeros_like(verified_updates[0].weights[key])
+        # Assume all updates have the same structure, take the first one for keys
+        first_update_weights = verified_updates[0].weights
+        for key in first_update_weights.keys():
+            # Initialize an encrypted zero vector for the sum.
+            # We must decrypt one vector to know the shape, which is a limitation.
+            # A better approach would be to know the model shape beforehand.
+            decrypted_shape_ref = first_update_weights[key].decrypt()
+            weighted_sum = ts.ckks_vector(self.fhe_context, np.zeros_like(decrypted_shape_ref))
+
             for update in verified_updates:
-                weight = update.samples_count / total_samples
-                weighted_sum += update.weights[key] * weight
+                weight = update.samples_count / total_samples  # Plaintext scalar
+                # Homomorphically multiply encrypted weights by plaintext weight and add to sum
+                weighted_term = update.weights[key] * weight
+                weighted_sum += weighted_term
             avg_weights[key] = weighted_sum
-            
+
         return avg_weights
     
     def update_global_model(self, aggregated_weights: Dict[str, np.ndarray]) -> None:

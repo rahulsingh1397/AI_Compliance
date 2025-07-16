@@ -1,7 +1,12 @@
 import spacy
 import sys
+import os
 
-with open('spacy_test_output.txt', 'w') as f:
+# Define the output path for the test results
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+output_file = os.path.join(project_root, 'tests', 'test_results', 'spacy_file_test_output.txt')
+
+with open(output_file, 'w') as f:
     f.write(f"Python version: {sys.version}\n")
     f.write(f"SpaCy version: {spacy.__version__}\n")
     

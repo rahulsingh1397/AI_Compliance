@@ -10,7 +10,7 @@ logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
     handlers=[
-        logging.FileHandler('agent_test.log'),
+        logging.FileHandler(os.path.join(project_root, 'tests', 'test_results', 'original_agent_test.log')),
         logging.StreamHandler()
     ]
 )
@@ -18,7 +18,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Add the project root to the Python path
-sys.path.insert(0, str(Path(__file__).parent))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, project_root)
 
 @dataclass
 class AgentConfig:
@@ -48,7 +49,7 @@ try:
     
     # Run a scan
     logger.info("Running file scan on data directory...")
-    target_dir = Path(__file__).parent / "AIComplianceMonitoring" / "data"
+    target_dir = os.path.join(project_root, "AIComplianceMonitoring", "data")
     
     logger.info(f"Target directory: {target_dir}")
     start_time = time.time()
@@ -60,14 +61,15 @@ try:
     logger.info(f"Files scanned: {len(scan_results)}")
     
     # Save results to file
-    with open("original_agent_results.json", "w") as f:
+    results_path = os.path.join(project_root, 'tests', 'test_results', 'original_agent_results.json')
+    with open(results_path, "w") as f:
         json.dump({
             "scan_time": end_time - start_time,
             "files_scanned": len(scan_results),
             "results": scan_results
         }, f, indent=2)
     
-    logger.info("Scan results saved to 'original_agent_results.json'")
+    logger.info(f"Scan results saved to '{results_path}'")
     
     print("\n--- Scan Summary ---")
     print(f"Total files scanned: {len(scan_results)}")

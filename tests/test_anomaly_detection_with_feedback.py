@@ -23,28 +23,34 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from pathlib import Path
 
+# Define project root and add to path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, project_root)
+
+# Define paths for test outputs
+test_output_dir = os.path.join(project_root, 'tests', 'test_results', 'feedback_test_outputs')
+log_file_path = os.path.join(test_output_dir, 'anomaly_detection_test.log')
+os.makedirs(test_output_dir, exist_ok=True)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('anomaly_detection_test.log')
+        logging.FileHandler(log_file_path)
     ]
 )
 logger = logging.getLogger('anomaly_detection_test')
-
-# Add the project root to the Python path so we can import modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Test Configuration
 class TestConfig:
     """Configuration for the test run"""
     
     # Paths
-    DATA_PATH = Path("AIComplianceMonitoring/data/5000000 HRA Records.csv")
-    MODEL_SAVE_DIR = Path("AIComplianceMonitoring/models")
-    RESULTS_DIR = Path("AIComplianceMonitoring/test_results")
+    DATA_PATH = Path(project_root) / "AIComplianceMonitoring" / "data" / "5000000 HRA Records.csv"
+    MODEL_SAVE_DIR = Path(test_output_dir) / "models"
+    RESULTS_DIR = Path(test_output_dir) / "results"
     
     # Test parameters
     SAMPLE_SIZE = 5000                  # Number of records to sample for testing
@@ -67,7 +73,7 @@ class TestConfig:
     ENSEMBLE_THRESHOLD = 0.6            # Threshold for binary predictions
     
     # Feedback loop parameters
-    FEEDBACK_STORAGE = Path("feedback_data")
+    FEEDBACK_STORAGE = Path(test_output_dir) / "feedback_data"
     VALIDATION_THRESHOLD = 0.7          # Confidence threshold for validation
     HUMAN_REVIEW_SAMPLE = 0.2           # Percentage of anomalies for simulated human review
 

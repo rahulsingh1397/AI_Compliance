@@ -14,7 +14,7 @@ from AIComplianceMonitoring.agents.monitoring.anomaly_detection import AnomalyDe
 
 class TestConfig:
     """Configuration for the unit test."""
-    MODEL_DIR = os.path.join(os.path.dirname(__file__), 'test_models')
+    MODEL_DIR = os.path.join(os.path.dirname(__file__), 'test_results', 'anomaly_detection_models')
     N_SAMPLES = 1000
     N_FEATURES = 10
     ANOMALY_FRACTION = 0.05

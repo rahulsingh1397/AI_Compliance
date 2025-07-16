@@ -18,7 +18,7 @@ logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
     handlers=[
-        logging.FileHandler('dep_test.log'),
+        logging.FileHandler(os.path.join(project_root, 'tests', 'test_results', 'dep_test.log')),
         logging.StreamHandler()
     ]
 )
@@ -41,7 +41,8 @@ class AgentConfig:
     default_file_extensions: Tuple[str, ...] = ('.txt', '.csv', '.json', '.xml', '.html', '.md')
 
 # Add the project root to the Python path
-sys.path.insert(0, str(Path(__file__).parent))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, project_root)
 
 # Create mock classes for testing
 class MockNLPModel:
@@ -127,7 +128,7 @@ def test_agent_initialization():
             # If import fails, try with a different approach - load module directly
             import importlib.util
             logger.info("Attempting to load module directly...")
-            agent_path = str(Path(__file__).parent / "AIComplianceMonitoring" / "agents" / "data_discovery" / "agent.py")
+            agent_path = os.path.join(project_root, "AIComplianceMonitoring", "agents", "data_discovery", "agent.py")
             spec = importlib.util.spec_from_file_location("agent", agent_path)
             agent_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(agent_module)

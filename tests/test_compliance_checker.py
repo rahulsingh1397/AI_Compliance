@@ -5,7 +5,8 @@ import os
 import sys
 
 # Add project root to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+# Add project root to allow imports from AIComplianceMonitoring
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from AIComplianceMonitoring.agents.monitoring.compliance_checker import ComplianceChecker
 from AIComplianceMonitoring.agents.monitoring.agent import MonitoringAgent, MonitoringAgentConfig

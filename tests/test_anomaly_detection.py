@@ -14,8 +14,8 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from datetime import datetime, timedelta
 
-# Add the project root to the path so we can import modules
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add project root to allow imports from AIComplianceMonitoring
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import the anomaly detection module
 from AIComplianceMonitoring.agents.monitoring.anomaly_detection import AnomalyDetectionModule
@@ -160,5 +160,6 @@ if __name__ == "__main__":
         f"Actual anomalies: {results['actual']}"
     )
     print(f"\n{summary}")
-    with open("test_results.txt", "w") as f:
+    output_path = os.path.join('tests', 'test_results', 'anomaly_detection_results.txt')
+    with open(output_path, "w") as f:
         f.write(summary)

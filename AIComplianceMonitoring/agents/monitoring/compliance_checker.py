@@ -2,6 +2,8 @@ import pandas as pd
 import logging
 from typing import Dict, Any, List
 
+from AIComplianceMonitoring.integrations.csl_service import CslService
+
 logger = logging.getLogger(__name__)
 
 class ComplianceChecker:
@@ -16,36 +18,11 @@ class ComplianceChecker:
             config: Configuration object with necessary parameters.
         """
         self.config = config
-        self.ofac_list = self._load_ofac_list()
-        self.bis_list = self._load_bis_list()
-        logger.info("ComplianceChecker initialized.")
+        csl_url = self.config.get("csl_json_url", "https://data.trade.gov/downloadable_consolidated_screening_list/v1/consolidated.json")
+        self.csl_service = CslService(csl_url=csl_url)
+        logger.info("ComplianceChecker initialized with live CSL service.")
 
-    def _load_ofac_list(self) -> List[str]:
-        """
-        Loads the OFAC Specially Designated Nationals (SDN) list.
-        In a real implementation, this would fetch the list from the U.S. Treasury.
-        """
-        # For demonstration, using a mock list.
-        mock_ofac_list = [
-            "Evil Corp",
-            "Bad Actor Inc.",
-            "Sanctioned Entity Ltd."
-        ]
-        logger.info(f"Loaded {len(mock_ofac_list)} entities into OFAC mock list.")
-        return mock_ofac_list
 
-    def _load_bis_list(self) -> List[str]:
-        """
-        Loads the BIS Entity List.
-        In a real implementation, this would fetch the list from the Bureau of Industry and Security.
-        """
-        # For demonstration, using a mock list.
-        mock_bis_list = [
-            "Questionable Tech",
-            "Risky Business Associates"
-        ]
-        logger.info(f"Loaded {len(mock_bis_list)} entities into BIS mock list.")
-        return mock_bis_list
 
     def check_compliance(self, logs_df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -72,20 +49,14 @@ class ComplianceChecker:
         logs_df['user'] = logs_df['user'].astype(str).fillna('')
         logs_df['resource'] = logs_df['resource'].astype(str).fillna('')
 
-        # Check against OFAC list
-        logs_df['ofac_match'] = logs_df.apply(
-            lambda row: any(entity in row['user'] or entity in row['resource'] for entity in self.ofac_list),
+        # Check against Consolidated Screening List
+        logs_df['csl_match'] = logs_df.apply(
+            lambda row: self.csl_service.search_name(row['user']) or self.csl_service.search_name(row['resource']),
             axis=1
         )
 
-        # Check against BIS list
-        logs_df['bis_match'] = logs_df.apply(
-            lambda row: any(entity in row['user'] or entity in row['resource'] for entity in self.bis_list),
-            axis=1
-        )
-        
-        # Combine results into a single compliance flag
-        logs_df['compliance_breach'] = logs_df['ofac_match'] | logs_df['bis_match']
+        # For simplicity, the compliance breach is determined by a CSL match.
+        logs_df['compliance_breach'] = logs_df['csl_match']
 
         num_breaches = logs_df['compliance_breach'].sum()
         if num_breaches > 0:
@@ -100,6 +71,5 @@ class ComplianceChecker:
         Get statistics about the compliance checker.
         """
         return {
-            "ofac_list_size": len(self.ofac_list),
-            "bis_list_size": len(self.bis_list)
+            "csl_list_size": self.csl_service.get_list_size()
         }

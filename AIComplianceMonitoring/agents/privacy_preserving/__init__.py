@@ -8,14 +8,24 @@ including Zero-Knowledge Machine Learning (ZKML) and Federated Learning componen
 __version__ = "0.1.0"
 
 # Import core components
-from .zkml_manager import ZKMLManager
-from .federated_learning import FederatedLearningManager
-from .audit_log import SecureAuditLog
-from .data_protection import DataProtectionManager
+from .data_protection import DataProtectionManager, ProtectedData, ProtectionLevel
+from .federated_learning import FederatedLearningManager, ModelUpdate
+from .federated_client import FederatedClient, ClientConfig, TrainingMetrics
+from .zkml_manager import ZKMLManager, ZKProof
+from .audit_log import AuditLogger, AuditEvent, EventType
 
 __all__ = [
-    'ZKMLManager',
+    'DataProtectionManager',
+    'ProtectedData', 
+    'ProtectionLevel',
     'FederatedLearningManager',
-    'SecureAuditLog',
-    'DataProtectionManager'
+    'ModelUpdate',
+    'FederatedClient',
+    'ClientConfig',
+    'TrainingMetrics',
+    'ZKMLManager',
+    'ZKProof',
+    'AuditLogger',
+    'AuditEvent',
+    'EventType'
 ]

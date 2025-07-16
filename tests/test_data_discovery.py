@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Optional, Union
 from datetime import datetime
 
 # --- Configuration & Setup ---
-project_root = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 # Define a basic configuration class similar to the original AgentConfig
 class AgentConfig:
@@ -421,13 +421,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--results_file", 
         type=str, 
-        default=os.path.join(project_root, 'scan_results.json'),
+        default=os.path.join(project_root, 'tests', 'test_results', 'data_discovery_results.json'),
         help="File to save scan results (JSON)."
     )
     parser.add_argument(
         "--log_file", 
         type=str, 
-        default=os.path.join(project_root, 'test_scan.log'),
+        default=os.path.join(project_root, 'tests', 'test_results', 'data_discovery_scan.log'),
         help="File to write logs to."
     )
     args = parser.parse_args()

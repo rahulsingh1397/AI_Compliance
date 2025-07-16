@@ -17,6 +17,10 @@ The platform is built on a modular, agent-based architecture, allowing for clear
 
 *   **Privacy-Preserving Technologies (PETs)**: A dedicated set of modules for implementing cutting-edge, privacy-enhancing technologies. This demonstrates a forward-thinking approach to data protection and a commitment to building trust with users.
 
+*   **Zero-Knowledge Machine Learning (ZKML)**: A privacy-preserving AI technique that allows for the verification of machine learning model predictions without revealing the model or the data, providing the highest level of privacy and security.
+
+*   **Federated Learning**: A decentralized machine learning approach that allows models to be trained on sensitive data without the data ever leaving its source, providing the highest level of privacy and security.
+
 ## 3. Key Implemented Features
 
 This project showcases a range of innovative features that set it apart as a comprehensive compliance solution:

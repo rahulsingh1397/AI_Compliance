@@ -6,9 +6,9 @@ from flask import Flask, session, request, redirect, url_for
 from flask_login import current_user
 from flask_migrate import Migrate
 
-# Use absolute import path for config and extensions
-from AIComplianceMonitoring.agents.ui_agent import config
-from AIComplianceMonitoring.agents.ui_agent.extensions import db, login_manager, babel # Import extensions from central file
+# Use relative imports to fix module paths
+from . import config
+from .extensions import db, login_manager, babel # Import extensions from central file
 
 # No top-level model imports or user_loader definitions here
 
@@ -31,15 +31,15 @@ def create_app():
     @login_manager.user_loader
     def load_user(user_id):
         # Import model locally to avoid circular dependency
-        from AIComplianceMonitoring.agents.ui_agent.models import User
+        from .models import User
         return User.query.get(int(user_id))
 
-    # 4. Import and register blueprints with absolute import paths
-    from AIComplianceMonitoring.agents.ui_agent.main import main_bp
-    from AIComplianceMonitoring.agents.ui_agent.auth import auth_bp
-    from AIComplianceMonitoring.agents.ui_agent.dashboard import dashboard_bp
-    from AIComplianceMonitoring.agents.ui_agent.settings import settings_bp
-    from AIComplianceMonitoring.agents.ui_agent.api import api_bp
+    # 4. Import and register blueprints with relative import paths
+    from .main import main_bp
+    from .auth import auth_bp
+    from .dashboard import dashboard_bp
+    from .settings import settings_bp
+    from .api import api_bp
     
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)

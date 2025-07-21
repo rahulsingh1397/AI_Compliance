@@ -29,6 +29,9 @@ from cryptography.hazmat.primitives.serialization import (
     NoEncryption
 )
 
+# Import advanced anonymization capabilities
+from .anonymization import AdvancedAnonymizer, AnonymizationConfig, AnonymizationMethod
+
 class ProtectionLevel(Enum):
     """Levels of data protection."""
     UNPROTECTED = auto()
@@ -67,13 +70,14 @@ class DataProtectionManager:
     pseudonymization, and anonymization.
     """
     
-    def __init__(self, secret_key: Optional[bytes] = None):
+    def __init__(self, secret_key: Optional[bytes] = None, anonymization_config: Optional[AnonymizationConfig] = None):
         """
         Initialize the data protection manager.
         
         Args:
             secret_key: Optional secret key for encryption. If not provided,
                       a new key will be generated (not recommended for production).
+            anonymization_config: Configuration for advanced anonymization techniques
         """
         self.secret_key = secret_key or Fernet.generate_key()
         self.fernet = Fernet(self.secret_key)
@@ -82,6 +86,9 @@ class DataProtectionManager:
         self._private_key = None
         self._public_key = None
         self._generate_rsa_keys()
+        
+        # Initialize advanced anonymization capabilities
+        self.anonymizer = AdvancedAnonymizer(anonymization_config)
     
     def _generate_rsa_keys(self) -> None:
         """Generate RSA key pair for asymmetric encryption."""
@@ -316,3 +323,33 @@ class DataProtectionManager:
             
         except Exception as e:
             raise ValueError(f"Decryption failed: {str(e)}")
+    
+    # Advanced Anonymization Methods
+    
+    def k_anonymize_dataframe(self, df, k: Optional[int] = None, quasi_identifiers: Optional[List[str]] = None):
+        """Apply K-anonymity to a DataFrame."""
+        if quasi_identifiers:
+            self.anonymizer.config.quasi_identifiers = quasi_identifiers
+        if k:
+            self.anonymizer.config.k = k
+        return self.anonymizer.k_anonymize(df)
+    
+    def l_diversify_dataframe(self, df, l: Optional[int] = None, sensitive_attributes: Optional[List[str]] = None):
+        """Apply L-diversity to a DataFrame."""
+        if sensitive_attributes:
+            self.anonymizer.config.sensitive_attributes = sensitive_attributes
+        if l:
+            self.anonymizer.config.l = l
+        return self.anonymizer.l_diversify(df)
+    
+    def add_differential_privacy_to_dataframe(self, df, epsilon: Optional[float] = None, delta: Optional[float] = None):
+        """Add differential privacy noise to a DataFrame."""
+        return self.anonymizer.add_differential_privacy(df, epsilon, delta)
+    
+    def full_anonymization_pipeline(self, df, methods: Optional[List] = None, config: Optional[Dict[str, Any]] = None):
+        """Apply complete anonymization pipeline."""
+        if config:
+            for key, value in config.items():
+                if hasattr(self.anonymizer.config, key):
+                    setattr(self.anonymizer.config, key, value)
+        return self.anonymizer.full_anonymization_pipeline(df, methods)

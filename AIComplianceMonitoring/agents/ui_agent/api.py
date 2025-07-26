@@ -10,7 +10,7 @@ from datetime import datetime
 # Configuration for mock data behavior
 class MockConfig:
     # Set to False to disable mock data fallback in production
-    ENABLE_MOCK_FALLBACK = False
+    ENABLE_MOCK_FALLBACK = True
 
 # Configure logging
 log = logging.getLogger(__name__)
@@ -120,35 +120,59 @@ def transform_report_to_dashboard_view(report):
 @login_required
 def compliance_data():
     """Endpoint to get compliance data for the dashboard"""
+    monitoring_api_url = os.environ.get('MONITORING_API_BASE_URL') or DEFAULT_API_URL
+    log.info(f"Using Monitoring API URL: {monitoring_api_url}")
+
     try:
-        # Path to the report file is in the project root, relative to this file's location
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        report_file_path = os.path.join(current_dir, '..', '..', '..', 'latest_report.json')
-        
-        log.info(f"Attempting to read compliance data from: {report_file_path}")
-        
-        if os.path.exists(report_file_path):
-            with open(report_file_path, 'r') as f:
-                data = json.load(f)
-            log.info("Successfully loaded compliance data from file.")
-            # Transform the data for the dashboard view
-            dashboard_view_data = transform_report_to_dashboard_view(data)
-            return jsonify(dashboard_view_data)
-        else:
-            log.warning(f"Report file not found at {report_file_path}. Falling back to mock data.")
-            # Check if mock fallback is enabled
-            if not MockConfig.ENABLE_MOCK_FALLBACK:
-                return jsonify({
-                    "error": "Compliance report not found",
-                    "details": f"File not found at {report_file_path}",
-                    "mock_fallback_enabled": False
-                }), 404
-            
-            # Use mock data as fallback
-            log.warning("Using mock data as fallback")
-            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            mock_data = get_mock_data(current_time)
-            return jsonify(mock_data)
+        log.debug(f"Sending request to {monitoring_api_url}/stats")
+        stats_response = requests.get(f"{monitoring_api_url}/stats", timeout=5)
+        stats_response.raise_for_status() # Raise an exception for bad status codes
+        stats_data = stats_response.json()
+        log.debug(f"Received stats: {stats_data}")
+
+        log.debug(f"Sending request to {monitoring_api_url}/alerts?limit=5")
+        alerts_response = requests.get(f"{monitoring_api_url}/alerts?limit=5", timeout=5)
+        alerts_response.raise_for_status()
+        alerts_data = alerts_response.json()
+        log.debug(f"Received alerts: {alerts_data}")
+
+        # Transform data into the format expected by the dashboard
+        ingestion_stats = stats_data.get('ingestion_stats', {})
+        detection_stats = stats_data.get('anomaly_detection_stats', {})
+        alert_stats = stats_data.get('alert_stats', {})
+        alerts_by_priority = alert_stats.get('alerts_by_priority', {})
+
+        risk_level = "Low"
+        if alerts_by_priority.get('high', 0) > 0:
+            risk_level = "High"
+        elif alerts_by_priority.get('medium', 0) > 0:
+            risk_level = "Medium"
+
+        key_metrics = {
+            'sensitive_files': detection_stats.get('sensitive_files_found', 0),
+            'total_scans': ingestion_stats.get('total_scans', 0),
+            'risk_level': risk_level,
+            'last_scan': format_timestamp(alert_stats.get('newest_alert'))
+        }
+
+        sensitive_data_types = {
+            'High Priority': alerts_by_priority.get('high', 0),
+            'Medium Priority': alerts_by_priority.get('medium', 0),
+            'Low Priority': alerts_by_priority.get('low', 0)
+        }
+
+        # Mock compliance status for now
+        compliance_status = {'GDPR': 95, 'CCPA': 88, 'HIPAA': 92}
+
+        final_data = {
+            'key_metrics': key_metrics,
+            'sensitive_data_types': sensitive_data_types,
+            'compliance_status': compliance_status,
+            'recent_alerts': alerts_data
+        }
+
+        log.info(f"Returning live API data with metrics: {key_metrics}")
+        return jsonify(final_data)
             
     except Exception as e:
         log.exception(f"An error occurred in compliance_data endpoint: {e}")

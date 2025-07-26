@@ -1,11 +1,8 @@
 import logging
-import sys
-import os
 
-# Add the root directory to sys.path to allow proper imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))) 
+# To run this server, execute the following command from the project's root directory:
+# python -m AIComplianceMonitoring.agents.ui_agent.scripts.run_ui_server
 
-# Import with absolute path to avoid relative import issues
 from AIComplianceMonitoring.agents.ui_agent.app import create_app
 
 # Configure detailed logging

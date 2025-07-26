@@ -1,165 +1,129 @@
 {% extends "base.html" %}
 
-{% block title %}{{ gettext('Dashboard') }}{% endblock %}
+{% block title %}{{ gettext('Dashboard') }} - {{ super() }}{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h2 m-0">{{ gettext('Compliance Dashboard') }}</h1>
-        <div>
-            <button class="btn btn-sm btn-outline-primary me-2">
-                <i class="fas fa-sync-alt me-1"></i> {{ gettext('Refresh Data') }}
-            </button>
-            <button class="btn btn-sm btn-outline-secondary">
-                <i class="fas fa-download me-1"></i> {{ gettext('Export Report') }}
-            </button>
+    <!-- Main Header -->
+    <div class="main-header">
+        <div class="search-bar">
+            <i class="fas fa-search"></i>
+            <input type="text" placeholder="Search for alerts, files, or reports...">
+        </div>
+        <div class="header-actions">
+            <button class="header-icon-btn"><i class="far fa-bell"></i></button>
+            <div class="header-date" id="current-date"></div>
+            <button id="run-scan-btn" class="btn btn-primary me-2"><i class="fas fa-search me-1"></i>{{ gettext('Run Scan') }}</button>
+            <button id="create-report-btn" class="btn create-btn">{{ gettext('Create Report') }}</button>
         </div>
     </div>
 
-    <!-- Key Metrics -->
-    <div class="row mb-4">
-        <div class="col-md-3 mb-4 mb-md-0">
-            <div class="card text-white bg-primary shadow-sm h-100">
-                <div class="card-body d-flex flex-column">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <h5 class="card-title mb-3"><i class="fas fa-file-alt me-2"></i>{{ gettext('Sensitive Files') }}</h5>
-                        <div class="icon-circle bg-primary-dark">
-                            <i class="fas fa-file-alt"></i>
-                        </div>
-                    </div>
-                    <p class="card-text fs-2 fw-bold mt-auto" id="sensitive-files-count">-</p>
-                    <div class="small mt-2 text-white-50">+2% from last scan</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 mb-4 mb-md-0">
-            <div class="card text-white bg-info shadow-sm h-100">
-                <div class="card-body d-flex flex-column">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <h5 class="card-title mb-3"><i class="fas fa-search me-2"></i>{{ gettext('Total Scans') }}</h5>
-                        <div class="icon-circle bg-accent">
-                            <i class="fas fa-search"></i>
-                        </div>
-                    </div>
-                    <p class="card-text fs-2 fw-bold mt-auto" id="total-scans-count">-</p>
-                    <div class="small mt-2 text-white-50">Last 30 days</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 mb-4 mb-md-0">
-            <div class="card text-white bg-warning shadow-sm h-100">
-                <div class="card-body d-flex flex-column">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <h5 class="card-title mb-3"><i class="fas fa-exclamation-triangle me-2"></i>{{ gettext('Risk Level') }}</h5>
-                        <div class="icon-circle bg-warning">
-                            <i class="fas fa-exclamation-triangle"></i>
-                        </div>
-                    </div>
-                    <p class="card-text fs-2 fw-bold mt-auto" id="risk-level">-</p>
-                    <div class="small mt-2 text-white-50">Based on 24 factors</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 mb-4 mb-md-0">
-            <div class="card text-white bg-secondary shadow-sm h-100">
-                <div class="card-body d-flex flex-column">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <h5 class="card-title mb-3"><i class="fas fa-calendar-alt me-2"></i>{{ gettext('Last Scan') }}</h5>
-                        <div class="icon-circle bg-dark">
-                            <i class="fas fa-calendar-alt"></i>
-                        </div>
-                    </div>
-                    <p class="card-text fs-2 fw-bold mt-auto" id="last-scan-date">-</p>
-                    <div class="small mt-2 text-white-50">Next scan in <span id="next-scan-countdown">12h</span></div>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Page Title -->
+    <h1 class="page-title">{{ gettext('Dashboard') }}</h1>
 
+    <!-- Key Metrics Row -->
     <div class="row">
-        <!-- Sensitive Data Types Chart -->
-        <div class="col-lg-6 mb-4">
-            <div class="card shadow-sm h-100">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6 class="m-0 font-weight-bold"><i class="fas fa-chart-pie me-2"></i>{{ gettext('Sensitive Data Types') }}</h6>
-                    <div class="dropdown">
-                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="dataTypeOptions" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-filter me-1"></i> {{ gettext('Filter') }}
-                        </button>
-                        <ul class="dropdown-menu" aria-labelledby="dataTypeOptions">
-                            <li><a class="dropdown-item" href="#">{{ gettext('All Data Types') }}</a></li>
-                            <li><a class="dropdown-item" href="#">{{ gettext('High Risk Only') }}</a></li>
-                            <li><a class="dropdown-item" href="#">{{ gettext('Regulated Data') }}</a></li>
-                        </ul>
+        <div class="col-md-3 mb-4 mb-md-0">
+            <a href="{{ url_for('dashboard.sensitive_files') }}" class="stat-card-link">
+                <div class="stat-card card-hover h-100">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-file-excel me-2"></i>{{ gettext('Sensitive Files') }}</h5>
+                        <p class="card-text" id="sensitive-files-count">-</p>
+                        <div class="card-footer-text">Across all sources</div>
                     </div>
                 </div>
-                <div class="card-body">
+            </a>
+        </div>
+        <div class="col-md-3 mb-4 mb-md-0">
+            <a href="{{ url_for('dashboard.scans') }}" class="stat-card-link">
+                <div class="stat-card card-hover h-100">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-search me-2"></i>{{ gettext('Total Scans') }}</h5>
+                        <p class="card-text" id="total-scans-count">-</p>
+                        <div class="card-footer-text">Last 30 days</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3 mb-4 mb-md-0">
+            <a href="{{ url_for('dashboard.risk_overview') }}" class="stat-card-link">
+                <div class="stat-card card-hover h-100">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-exclamation-triangle me-2"></i>{{ gettext('Risk Level') }}</h5>
+                        <p class="card-text" id="risk-level-status">-</p>
+                        <div class="card-footer-text">Overall assessment</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3 mb-4 mb-md-0">
+            <a href="{{ url_for('dashboard.scans') }}" class="text-decoration-none">
+                <div class="stat-card card-hover">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-calendar-alt me-2"></i>{{ gettext('Last Scan') }}</h5>
+                        <p class="card-text" id="last-scan-date">-</p>
+
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mt-4">
+        <div class="col-lg-6 mb-4">
+            <div class="chart-wrapper">
+                <div class="list-header">
+                    <h4><i class="fas fa-chart-pie me-2"></i>{{ gettext('Sensitive Data Types') }}</h4>
+                    <a href="{{ url_for('dashboard.data_types') }}" class="btn list-action-btn">{{ gettext('View All') }}</a>
+                </div>
+                <div class="chart-body">
                     <canvas id="dataTypesChart"></canvas>
                 </div>
             </div>
         </div>
-
-        <!-- Compliance Status Chart -->
         <div class="col-lg-6 mb-4">
-            <div class="card shadow-sm h-100">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6 class="m-0 font-weight-bold"><i class="fas fa-balance-scale me-2"></i>{{ gettext('Compliance Status') }}</h6>
-                    <div class="dropdown">
-                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="complianceOptions" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-filter me-1"></i> {{ gettext('Framework') }}
-                        </button>
-                        <ul class="dropdown-menu" aria-labelledby="complianceOptions">
-                            <li><a class="dropdown-item" href="#">{{ gettext('All Frameworks') }}</a></li>
-                            <li><a class="dropdown-item" href="#">{{ gettext('GDPR') }}</a></li>
-                            <li><a class="dropdown-item" href="#">{{ gettext('HIPAA') }}</a></li>
-                            <li><a class="dropdown-item" href="#">{{ gettext('CCPA') }}</a></li>
-                        </ul>
-                    </div>
+            <div class="chart-wrapper">
+                <div class="list-header">
+                    <h4><i class="fas fa-balance-scale me-2"></i>{{ gettext('Compliance Status') }}</h4>
+                    <a href="{{ url_for('dashboard.compliance_status') }}" class="btn list-action-btn">{{ gettext('View All') }}</a>
                 </div>
-                <div class="card-body">
+                <div class="chart-body">
                     <canvas id="complianceStatusChart"></canvas>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Recent Alerts -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h6 class="m-0 font-weight-bold"><i class="fas fa-bell me-2"></i>{{ gettext('Recent Alerts') }}</h6>
-            <div>
-                <button class="btn btn-sm btn-outline-secondary me-2">
-                    <i class="fas fa-filter me-1"></i> {{ gettext('Filter') }}
-                </button>
-                <button class="btn btn-sm btn-outline-primary">
-                    <i class="fas fa-external-link-alt me-1"></i> {{ gettext('View All') }}
-                </button>
+    <!-- Recent Alerts List -->
+    <div class="content-list-wrapper">
+        <div class="list-header">
+            <h4>{{ gettext('Recent Alerts') }}</h4>
+            <div class="list-actions">
+                <button class="btn list-action-btn"><i class="fas fa-filter me-1"></i> {{ gettext('Filter') }}</button>
+                <button class="btn list-action-btn"><i class="fas fa-sort me-1"></i> {{ gettext('Sort') }}</button>
             </div>
         </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>{{ gettext('Timestamp') }}</th>
-                            <th>{{ gettext('Message') }}</th>
-                            <th>{{ gettext('Location') }}</th>
-                            <th>{{ gettext('Severity') }}</th>
-                            <th>{{ gettext('Actions') }}</th>
-                        </tr>
-                    </thead>
-                    <tbody id="recent-alerts-table">
-                        <!-- Data will be populated by JavaScript -->
-                    </tbody>
-                </table>
-            </div>
+        <div class="list-content">
+            <table class="alerts-list-table" id="alerts-table">
+                <thead>
+                    <tr>
+                        <th>{{ gettext('Description') }}</th>
+                        <th>{{ gettext('Severity') }}</th>
+                        <th>{{ gettext('Timestamp') }}</th>
+                        <th>{{ gettext('Source') }}</th>
+                        <th>{{ gettext('Status') }}</th>
+                        <th>&nbsp;</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Alert rows will be populated by JavaScript -->
+                </tbody>
+            </table>
         </div>
     </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
-{{ super() }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 {% endblock %}

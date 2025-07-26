@@ -6,9 +6,12 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 from datetime import datetime, timedelta
 
-from AIComplianceMonitoring.agents.ui_agent.extensions import db
-from AIComplianceMonitoring.agents.ui_agent.forms import LoginForm, RegistrationForm
-from AIComplianceMonitoring.agents.ui_agent.config import Config
+from ..extensions import db
+from ..forms import LoginForm, RegistrationForm
+from .. import config
+
+# Access config as Config for compatibility
+Config = config.Config
 
 auth_bp = Blueprint('auth', __name__)
 limiter = Limiter(key_func=get_remote_address)
@@ -19,7 +22,7 @@ login_limiter = limiter.shared_limit("5 per minute", scope="auth")
 @auth_bp.route('/login', methods=['GET', 'POST'])
 @login_limiter
 def login():
-    from AIComplianceMonitoring.agents.ui_agent.models import User, LoginAttempt
+    from ..models import User, LoginAttempt
     try:
         if current_user.is_authenticated:
             app.logger.debug(f"User already authenticated: {current_user.username}")
@@ -96,7 +99,7 @@ def login():
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
-    from AIComplianceMonitoring.agents.ui_agent.models import User
+    from ..models import User
     if current_user.is_authenticated:
         return redirect(url_for('dashboard.index'))
     form = RegistrationForm()

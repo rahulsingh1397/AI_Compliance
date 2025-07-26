@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}{{ gettext('Sensitive Data Types') }} - {{ super() }}{% endblock %}
+
+{% block content %}
+<!-- Main Header -->
+<div class="main-header">
+    <h1 class="page-title">{{ title }}</h1>
+    <div class="header-actions">
+        <button class="btn list-action-btn"><i class="fas fa-filter me-1"></i> {{ gettext('Filter by Source') }}</button>
+        <button class="btn create-btn">{{ gettext('Export Details') }}</button>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="stat-card h-100">
+            <div class="card-body">
+                <h5 class="card-title">{{ gettext('Total Data Types Found') }}</h5>
+                <p class="card-text">{{ summary.total_types }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="stat-card h-100">
+            <div class="card-body">
+                <h5 class="card-title">{{ gettext('Most Common Type') }}</h5>
+                <p class="card-text">{{ summary.most_common }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="stat-card h-100">
+            <div class="card-body">
+                <h5 class="card-title">{{ gettext('Highest Risk Type') }}</h5>
+                <p class="card-text">{{ summary.highest_risk }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Data Types List -->
+<div class="content-list-wrapper">
+    <div class="list-content">
+        <table class="data-types-list-table" id="data-types-table">
+            <thead>
+                <tr>
+                    <th>{{ gettext('Data Type') }}</th>
+                    <th>{{ gettext('Risk Level') }}</th>
+                    <th>{{ gettext('Files Found') }}</th>
+                    <th>{{ gettext('Regulation') }}</th>
+                    <th>&nbsp;</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dtype in data_types %}
+                <tr>
+                    <td>{{ dtype.name }}</td>
+                    <td><span class="severity-indicator severity-{{ dtype.risk_level.lower() }}">{{ dtype.risk_level }}</span></td>
+                    <td>{{ "{:,}".format(dtype.files_found) }}</td>
+                    <td><span class="badge bg-secondary">{{ dtype.regulation }}</span></td>
+                    <td>
+                        <a href="#" class="btn-view-details"><i class="fas fa-chevron-right"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

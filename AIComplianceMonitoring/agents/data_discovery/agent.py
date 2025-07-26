@@ -355,7 +355,7 @@ class DataDiscoveryAgent:
                 # Extract results from the full analysis
                 sensitive_data_found = full_analysis_result['classification']['contains_sensitive_data']
                 pii_entities = full_analysis_result.get('pii_entities', [])
-                sensitive_data_types = {entity['type'] for entity in pii_entities}
+                sensitive_data_types = {entity['entity_type'] for entity in pii_entities}
                 
                 # Store metadata with column-level analysis
                 doc_id = document_identifier or file_name
@@ -446,7 +446,7 @@ class DataDiscoveryAgent:
                                 column_analysis_details[column_name]['contains_sensitive_data'] = True
                             
                             if col_pii_entities:
-                                pii_types = {entity['type'] for entity in col_pii_entities}
+                                pii_types = {entity['entity_type'] for entity in col_pii_entities}
                                 overall_sensitive_types.update(pii_types)
                                 column_analysis_details[column_name]['sensitive_data_types'].update(pii_types)
                                 column_analysis_details[column_name]['pii_entities_found'] += len(col_pii_entities)
@@ -519,7 +519,7 @@ class DataDiscoveryAgent:
                 # Extract results from the full analysis
                 sensitive_data_found = analysis_result['classification']['contains_sensitive_data']
                 pii_entities = analysis_result.get('pii_entities', [])
-                sensitive_data_types = {entity['type'] for entity in pii_entities}
+                sensitive_data_types = {entity['entity_type'] for entity in pii_entities}
                 
                 # Store metadata
                 doc_id = document_identifier or file_name
@@ -816,7 +816,8 @@ class DataDiscoveryAgent:
                         results[relative_path] = result
                         
                         # Track sensitive files
-                        if result.get('contains_sensitive_data', False):
+                        # A file is sensitive if it contains any PII, a more reliable metric.
+                        if result.get('pii_count', 0) > 0:
                             sensitive_files.append({
                                 'path': relative_path,
                                 'sensitive_types': result.get('sensitive_data_types', []),
@@ -844,7 +845,7 @@ class DataDiscoveryAgent:
         mb_per_sec = (processed_size / (1024 * 1024)) / elapsed if elapsed > 0 else 0
         
         # Generate summary
-        summary = self._generate_scan_summary(directory_path, results)
+        summary = self._generate_scan_summary(directory_path, results, sensitive_files)
         
         # Add timing and rate information
         summary.update({
@@ -882,12 +883,11 @@ class DataDiscoveryAgent:
     
     def _generate_scan_summary(self, 
                               directory_path: str, 
-                              results: Dict[str, Any]) -> Dict[str, Any]:
+                              results: Dict[str, Any],
+                              sensitive_files: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Generate summary report from scan results"""
-        sensitive_files = []
-        for file_path, result in results.items():
-            if result.get("status") == "success" and result.get("contains_sensitive_data", False):
-                sensitive_files.append(file_path)
+        # Extract just the file paths from the sensitive_files list for backward compatibility
+        sensitive_file_paths = [sf['path'] for sf in sensitive_files]
         
         success_count = sum(1 for r in results.values() if r.get("status") == "success")
         failure_count = len(results) - success_count
@@ -898,7 +898,7 @@ class DataDiscoveryAgent:
             "successful_scans": success_count,
             "failed_scans": failure_count,
             "sensitive_files_found": len(sensitive_files),
-            "sensitive_file_paths": sensitive_files,
+            "sensitive_file_paths": sensitive_file_paths,
             "scan_details": results
         }
     

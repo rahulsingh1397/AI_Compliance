@@ -7,8 +7,49 @@ setup(
     description='A comprehensive suite for AI compliance monitoring, reporting, and integration.',
     author='AI Compliance Team',
     install_requires=[
-        # Add your project's core dependencies here
-        # For example: 'flask', 'sqlalchemy', etc.
-        # The requirements from specific agents will be handled separately
+        # Core dependencies
+        'numpy>=1.24.3',
+        'pandas>=2.0.0',
+        'scikit-learn>=1.2.2',
+        'matplotlib>=3.7.1',
+        'seaborn>=0.12.2',
+        'torch>=2.0.0',
+        'tensorflow>=2.12.0',
+        'transformers>=4.28.1',
+        'tenacity>=8.2.2',
+        'requests>=2.28.2',
+        
+        # UI dependencies
+        'Flask>=3.0.3',
+        'Flask-Login>=0.6.3',
+        'Flask-SQLAlchemy>=3.1.1',
+        'Flask-WTF>=1.2.1',
+        'Flask-Migrate>=4.0.7',
+        'SQLAlchemy>=2.0.31',
+        'bcrypt>=4.1.3',
+        'Werkzeug>=3.0.3',
+        'redis>=5.0.7',
+        'Flask-Limiter>=3.6.0',
+        'PyJWT>=2.8.0',
+        'email-validator>=2.2.0',
+        
+        # Privacy-preserving dependencies
+        'tenseal>=0.3.12',
+        'cryptography>=39.0.1',
+        'pycryptodome>=3.17.0',
+        
+        # Monitoring dependencies
+        'pyarrow>=11.0.0',
+        'boto3>=1.26.84',
+        'azure-storage-blob>=12.14.1',
+        'fastparquet>=2023.2.0',
+    ],
+    python_requires='>=3.9,<3.11',  # Specify compatible Python versions
+    classifiers=[
+        'Development Status :: 4 - Beta',
+        'Intended Audience :: Developers',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
     ],
 )

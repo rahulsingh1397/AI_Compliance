@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}{{ gettext('Scan History') }} - {{ super() }}{% endblock %}
+
+{% block content %}
+<!-- Main Header -->
+<div class="main-header">
+    <h1 class="page-title">{{ title }}</h1>
+    <div class="header-actions">
+        <button class="btn list-action-btn"><i class="fas fa-filter me-1"></i> {{ gettext('Filter by Status') }}</button>
+        <button class="btn create-btn" id="run-scan-btn">{{ gettext('Run New Scan') }}</button>
+    </div>
+</div>
+
+<!-- Scans List -->
+<div class="content-list-wrapper">
+    <div class="list-content">
+        <table class="scans-list-table" id="scans-table">
+            <thead>
+                <tr>
+                    <th>{{ gettext('Scan ID') }}</th>
+                    <th>{{ gettext('Start Time') }}</th>
+                    <th>{{ gettext('End Time') }}</th>
+                    <th>{{ gettext('Status') }}</th>
+                    <th>{{ gettext('Files Scanned') }}</th>
+                    <th>{{ gettext('Alerts Found') }}</th>
+                    <th>&nbsp;</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for scan in scans %}
+                <tr>
+                    <td><span class="scan-id">{{ scan.id }}</span></td>
+                    <td>{{ scan.start_time|datetime if scan.start_time else '-' }}</td>
+                    <td>{{ scan.end_time|datetime if scan.end_time else '-' }}</td>
+                    <td><span class="status-indicator {{ scan.status.lower() }}">{{ scan.status }}</span></td>
+                    <td>{{ scan.files_scanned }}</td>
+                    <td>{{ scan.alerts_found }}</td>
+                    <td>
+                        <a href="#" class="btn-view-details"><i class="fas fa-chevron-right"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/scans.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,684 @@
+.card-hover:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
+    transition: all 0.3s ease;
+}
+
+/* General Body and Layout */
+body {
+    font-family: 'Inter', 'Roboto', sans-serif; /* Prioritize Inter font if available */
+    background-color: #f7f8fa; /* Light grey background from the design */
+    margin: 0;
+    color: #333;
+}
+
+.page-wrapper {
+    display: flex;
+    height: 100vh;
+}
+
+/* Sidebar Styling */
+.sidebar {
+    width: 260px;
+    background-color: #ffffff;
+    border-right: 1px solid #e9ecef;
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem;
+    transition: width 0.3s ease;
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #8A2BE2; /* A purple tone similar to the logo */
+    margin-bottom: 2.5rem;
+}
+
+.sidebar-nav {
+    flex-grow: 1;
+}
+
+.nav-group {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 2rem 0;
+}
+
+.nav-item-header {
+    font-size: 0.8rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+}
+
+.nav-item a {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    color: #495057;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.nav-item.active a, .nav-item a:hover {
+    background-color: #e8e6ff;
+    color: #5a4fcf;
+}
+
+.nav-item a .badge {
+    margin-left: auto;
+    background-color: #5a4fcf;
+    color: white;
+    font-size: 0.75rem;
+    padding: 0.25em 0.6em;
+}
+
+/* Sidebar Footer */
+.sidebar-footer {
+    margin-top: auto;
+}
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    border-radius: 8px;
+    transition: background-color 0.2s ease;
+}
+
+.user-profile:hover {
+    background-color: #f1f3f5;
+}
+
+.user-profile img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-right: 1rem;
+}
+
+.user-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.user-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.user-email {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.user-profile .fa-sign-out-alt {
+    color: #6c757d;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.user-profile .fa-sign-out-alt:hover {
+    color: #343a40;
+}
+
+/* Main Content Area */
+.main-content {
+    flex-grow: 1;
+    padding: 1.5rem 2.5rem;
+    overflow-y: auto;
+    background-color: #fbfcfe;
+}
+
+/* Main Header */
+.main-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.search-bar {
+    display: flex;
+    align-items: center;
+    background-color: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    width: 350px;
+}
+
+.search-bar i {
+    color: #6c757d;
+}
+
+.search-bar input {
+    border: none;
+    outline: none;
+    background: none;
+    width: 100%;
+    margin-left: 0.75rem;
+    font-size: 0.9rem;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.header-icon-btn {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    color: #495057;
+    cursor: pointer;
+}
+
+.header-date {
+    color: #495057;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.create-btn {
+    background-color: #1a1a1a;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0.6rem 1.2rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: background-color 0.2s ease;
+}
+
+.create-btn:hover {
+    background-color: #333;
+}
+
+.page-title {
+    font-size: 2rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+}
+
+/* Stat Card Styling */
+.stat-card {
+    background-color: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+    cursor: pointer;
+}
+
+.stat-card .card-title {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 1rem;
+}
+
+.stat-card .card-text {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #343a40;
+}
+
+.stat-card-link {
+    text-decoration: none;
+}
+
+.stat-card-link .stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+}
+
+.stat-card .card-footer-text {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 0.5rem;
+}
+
+/* Content List (for alerts, etc.) */
+.content-list-wrapper {
+    background-color: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    margin-top: 2rem;
+}
+
+.list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.list-header h4 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.list-actions {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.list-action-btn {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    color: #495057;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+}
+
+.list-content {
+    padding: 0.5rem 0;
+}
+
+.alerts-list-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.alerts-list-table th, .alerts-list-table td {
+    padding: 1rem 1.5rem;
+    text-align: left;
+    vertical-align: middle;
+}
+
+.alerts-list-table thead th {
+    color: #6c757d;
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.alerts-list-table tbody tr {
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.alerts-list-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.alerts-list-table tbody td {
+    font-size: 0.9rem;
+    color: #495057;
+}
+
+.alerts-list-table .status-indicator {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.status-indicator.new {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.status-indicator.in-progress {
+    background-color: #cce5ff;
+    color: #004085;
+}
+
+.status-indicator.resolved {
+    background-color: #e2e3e5;
+    color: #383d41;
+}
+
+.alerts-list-table .severity-high {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.alerts-list-table .severity-medium {
+    color: #ffc107;
+    font-weight: 600;
+}
+
+.alerts-list-table .severity-low {
+    color: #28a745;
+    font-weight: 600;
+}
+
+/* Chart Wrapper */
+.chart-wrapper {
+    background-color: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    height: 100%;
+}
+
+.chart-body {
+    padding: 1.5rem;
+}
+
+/* Files List Table */
+.files-list-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.files-list-table th, .files-list-table td {
+    padding: 1rem 1.5rem;
+    text-align: left;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.files-list-table thead th {
+    color: #6c757d;
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.files-list-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.file-info {
+    display: flex;
+    align-items: center;
+}
+
+.file-icon {
+    font-size: 1.5rem;
+    color: #495057;
+    margin-right: 1rem;
+}
+
+.file-name {
+    font-weight: 500;
+    color: #212529;
+}
+
+.file-path {
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+
+.severity-indicator {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.severity-high {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.severity-medium {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.severity-low {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.btn-view-details {
+    color: #6c757d;
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.btn-view-details:hover {
+    color: #212529;
+}
+
+/* Risk Overview Page */
+.risk-score-card {
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.risk-score {
+    font-size: 4rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.risk-score.high, .risk-score-small.high {
+    color: #dc3545;
+}
+
+.risk-score.medium, .risk-score-small.medium {
+    color: #ffc107;
+}
+
+.risk-score.low, .risk-score-small.low {
+    color: #28a745;
+}
+
+.risk-level {
+    font-size: 1.25rem;
+    font-weight: 500;
+    margin-top: 0.5rem;
+}
+
+.risk-description {
+    font-size: 0.9rem;
+    color: #6c757d;
+    margin-top: 1rem;
+}
+
+.risk-score-small {
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.risk-category-body {
+    padding: 1.5rem;
+}
+
+.risk-category-body p {
+    font-size: 0.9rem;
+    color: #495057;
+}
+
+.risk-factors-list {
+    list-style-type: none;
+    padding-left: 0;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+}
+
+.risk-factors-list li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.risk-factors-list li:last-child {
+    border-bottom: none;
+}
+
+.risk-factors-list li::before {
+    content: "\2022";
+    color: #0d6efd;
+    font-weight: bold;
+    display: inline-block;
+    width: 1em;
+    margin-left: -1em;
+}
+
+/* Scans List Table */
+.scans-list-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.scans-list-table th, .scans-list-table td {
+    padding: 1rem 1.5rem;
+    text-align: left;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.scans-list-table thead th {
+    color: #6c757d;
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.scans-list-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.scan-id {
+    font-family: 'Courier New', Courier, monospace;
+    background-color: #e9ecef;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.status-indicator.completed {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.status-indicator.failed {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.status-indicator.in-progress {
+    background-color: #cce5ff;
+    color: #004085;
+}
+
+/* Data Types List Table */
+.data-types-list-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-types-list-table th, .data-types-list-table td {
+    padding: 1rem 1.5rem;
+    text-align: left;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.data-types-list-table thead th {
+    color: #6c757d;
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.data-types-list-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Compliance List Table */
+.compliance-list-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.compliance-list-table th, .compliance-list-table td {
+    padding: 1rem 1.5rem;
+    text-align: left;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.compliance-list-table thead th {
+    color: #6c757d;
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.compliance-list-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.status-indicator.at-risk {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.status-indicator.non-compliant {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.status-indicator.compliant {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.progress-bar {
+    background-color: #0d6efd;
+}
+
+/* Alert Details Page */
+.alert-description-body, .alert-actions-body, .alert-metadata {
+    padding: 1.5rem;
+}
+
+.alert-actions-body ul {
+    list-style-type: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+.alert-actions-body li {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.alert-actions-body li:last-child {
+    border-bottom: none;
+}
+
+.alert-metadata .metadata-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.alert-metadata .metadata-item:last-child {
+    border-bottom: none;
+}
+
+.alert-metadata .metadata-label {
+    color: #6c757d;
+    font-weight: 500;
+}

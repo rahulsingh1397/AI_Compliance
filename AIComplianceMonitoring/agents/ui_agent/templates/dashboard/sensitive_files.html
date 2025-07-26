@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}{{ gettext('Sensitive Files') }} - {{ super() }}{% endblock %}
+
+{% block content %}
+<!-- Main Header -->
+<div class="main-header">
+    <h1 class="page-title">{{ title }}</h1>
+    <div class="header-actions">
+        <div class="search-bar">
+            <i class="fas fa-search"></i>
+            <input type="text" placeholder="Search files...">
+        </div>
+        <button class="btn list-action-btn"><i class="fas fa-filter me-1"></i> {{ gettext('Filter by Type') }}</button>
+        <button class="btn list-action-btn"><i class="fas fa-sort me-1"></i> {{ gettext('Sort by Risk') }}</button>
+        <button class="btn create-btn">{{ gettext('Export List') }}</button>
+    </div>
+</div>
+
+<!-- Sensitive Files List -->
+<div class="content-list-wrapper">
+    <div class="list-content">
+        <table class="files-list-table" id="files-table">
+            <thead>
+                <tr>
+                    <th>{{ gettext('File Name') }}</th>
+                    <th>{{ gettext('Data Source') }}</th>
+                    <th>{{ gettext('Risk Level') }}</th>
+                    <th>{{ gettext('Last Accessed') }}</th>
+                    <th>{{ gettext('File Size') }}</th>
+                    <th>&nbsp;</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for file in files %}
+                <tr>
+                    <td>
+                        <div class="file-info">
+                            <i class="fas fa-file-alt file-icon"></i>
+                            <div>
+                                <div class="file-name">{{ file.name }}</div>
+                                <div class="file-path">{{ file.path }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>{{ file.source }}</td>
+                    <td><span class="severity-indicator severity-{{ file.risk_level.lower() }}">{{ file.risk_level }}</span></td>
+                    <td>{{ file.last_accessed | datetime }}</td>
+                    <td>{{ file.size | filesize }}</td>
+                    <td>
+                        <a href="{{ url_for('dashboard.sensitive_file_details', file_path=file.path) }}" class="btn-view-details"><i class="fas fa-chevron-right"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

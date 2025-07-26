@@ -28,6 +28,7 @@ instance/
 
 # Environment variables
 .env
+.venv/
 
 # Generated reports and data
 latest_report.json

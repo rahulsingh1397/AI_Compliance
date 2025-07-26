@@ -1,9 +1,14 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, session
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app
 from flask_login import login_required, current_user
 import bcrypt
+import sys
+import os
 
-from AIComplianceMonitoring.agents.ui_agent.extensions import db
-from AIComplianceMonitoring.agents.ui_agent.forms import ProfileForm, PasswordChangeForm
+# Add parent directory to path for local imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from extensions import db
+from forms import ProfileForm, PasswordChangeForm
 
 settings_bp = Blueprint('settings', __name__)
 
@@ -45,7 +50,7 @@ def index():
 @settings_bp.route('/set_language/<lang>')
 @login_required
 def set_language(lang):
-    if lang in app.config['LANGUAGES']:
+    if lang in current_app.config['LANGUAGES']:
         session['lang'] = lang
         if current_user.is_authenticated:
             current_user.language = lang

@@ -1,75 +1,66 @@
-import pandas as pd
 import logging
-from typing import Dict, Any, List
+import json
+from typing import Dict, Any, Optional
+from flask import Flask
 
-from AIComplianceMonitoring.integrations.csl_service import CslService
+# Assuming models and db are accessible via the Flask app context
 
 logger = logging.getLogger(__name__)
 
 class ComplianceChecker:
     """
-    Handles compliance checks against OFAC and BIS lists.
+    Handles compliance checks by fetching the latest scan results from the database.
     """
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, app: Optional[Flask] = None):
         """
         Initialize the compliance checker.
 
         Args:
-            config: Configuration object with necessary parameters.
+            app: The Flask application instance to access the database.
         """
-        self.config = config
-        csl_url = self.config.get("csl_json_url", "https://data.trade.gov/downloadable_consolidated_screening_list/v1/consolidated.json")
-        self.csl_service = CslService(csl_url=csl_url)
-        logger.info("ComplianceChecker initialized with live CSL service.")
-
-
-
-    def check_compliance(self, logs_df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Checks logs for entities on OFAC and BIS lists.
-
-        Args:
-            logs_df: DataFrame containing the logs to check.
-
-        Returns:
-            DataFrame with added compliance check columns.
-        """
-        if logs_df.empty:
-            return logs_df
-
-        logger.info(f"Performing compliance check on {len(logs_df)} log entries.")
-
-        # Ensure 'user' and 'resource' columns exist
-        if 'user' not in logs_df.columns:
-            logs_df['user'] = ''
-        if 'resource' not in logs_df.columns:
-            logs_df['resource'] = ''
-            
-        # Convert to string and fill NaNs
-        logs_df['user'] = logs_df['user'].astype(str).fillna('')
-        logs_df['resource'] = logs_df['resource'].astype(str).fillna('')
-
-        # Check against Consolidated Screening List
-        logs_df['csl_match'] = logs_df.apply(
-            lambda row: self.csl_service.search_name(row['user']) or self.csl_service.search_name(row['resource']),
-            axis=1
-        )
-
-        # For simplicity, the compliance breach is determined by a CSL match.
-        logs_df['compliance_breach'] = logs_df['csl_match']
-
-        num_breaches = logs_df['compliance_breach'].sum()
-        if num_breaches > 0:
-            logger.warning(f"Detected {num_breaches} potential compliance breaches.")
+        self.app = app
+        if self.app:
+            logger.info("ComplianceChecker initialized with Flask app context.")
         else:
-            logger.info("No compliance breaches detected.")
-
-        return logs_df
+            logger.warning("ComplianceChecker initialized without Flask app context. Stats will be unavailable.")
 
     def get_stats(self) -> Dict[str, Any]:
         """
-        Get statistics about the compliance checker.
+        Get statistics about the compliance state from the last scan.
         """
-        return {
-            "csl_list_size": self.csl_service.get_list_size()
-        }
+        if not self.app:
+            return {"error": "Flask app context not available."}
+
+        with self.app.app_context():
+            from AIComplianceMonitoring.agents.ui_agent.models import ScanHistory
+
+            latest_scan = ScanHistory.query.order_by(ScanHistory.start_time.desc()).first()
+
+            if not latest_scan:
+                return {
+                    'sensitive_files_found': 0,
+                    'total_files_scanned': 0,
+                    'risk_level': 'Low',
+                    'last_scan_date': 'N/A',
+                    'total_scans': ScanHistory.query.count(),
+                    'pii_types_found': {}
+                }
+
+            risk_level = 'Low'
+            if latest_scan.sensitive_files_found > 10:
+                risk_level = 'High'
+            elif latest_scan.sensitive_files_found > 3:
+                risk_level = 'Medium'
+
+            pii_types_found = {}
+            if latest_scan.results and 'pii_types_found' in latest_scan.results:
+                pii_types_found = latest_scan.results['pii_types_found']
+
+            return {
+                'sensitive_files_found': latest_scan.sensitive_files_found,
+                'total_files_scanned': latest_scan.total_files_scanned,
+                'risk_level': risk_level,
+                'last_scan_date': latest_scan.start_time.isoformat() if latest_scan.start_time else 'N/A',
+                'total_scans': ScanHistory.query.count(),
+                'pii_types_found': pii_types_found
+            }

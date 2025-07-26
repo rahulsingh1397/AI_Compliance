@@ -32,11 +32,16 @@ class MLClassifier:
         Args:
             classifier_type: Type of classifier to use ('lightgbm' or 'svm')
         """
-        self.classifier_type = classifier_type
+        self.classifier_type = classifier_type.lower()
         self.model = None
         self.feature_names = []
         self.label_encoder = LabelEncoder()
         self.scaler = StandardScaler()
+        self.is_trained = False
+        self.training_metrics = {}
+        self.version = "1.1.0"
+        
+        logger.info(f"Initializing MLClassifier v{self.version} with {self.classifier_type} classifier")
         
         # Initialize the classifier
         self._initialize_classifier()
@@ -219,18 +224,94 @@ class MLClassifier:
         Returns:
             Dictionary with analysis results
         """
-        # Extract features from the column
-        features = self._extract_column_features(column_data, column_name)
+        if not self.is_trained:
+            logger.warning("MLClassifier has not been trained. Predictions may not be accurate.")
+            
+        try:
+            # Extract features from the column
+            features = self._extract_column_features(column_data, column_name)
+            
+            # Check if error occurred during feature extraction
+            if features.get("error_occurred", False):
+                logger.warning(f"Using fallback heuristic analysis for column {column_name} due to feature extraction error")
+                # Fallback to heuristic method if feature extraction failed
+                is_sensitive = self._heuristic_sensitivity_check(column_data, column_name)
+                return {
+                    "classification": "sensitive" if is_sensitive else "non-sensitive",
+                    "confidence": 0.7 if is_sensitive else 0.6,  # Lower confidence for heuristic method
+                    "contains_sensitive_data": is_sensitive,
+                    "column_name": column_name,
+                    "sample_values": column_data.head(3).tolist() if len(column_data) > 0 else [],
+                    "data_type": str(column_data.dtype),
+                    "analysis_method": "heuristic_fallback"
+                }
+            
+            # Make prediction using extracted features
+            result = self.predict(features)
+            
+            # Add additional information
+            result["column_name"] = column_name
+            result["sample_values"] = column_data.head(3).tolist() if len(column_data) > 0 else []
+            result["data_type"] = str(column_data.dtype)
+            result["analysis_method"] = "ml_classifier"
+            
+            return result
+        except Exception as e:
+            logger.error(f"Error analyzing column {column_name}: {str(e)}")
+            # Return a conservative result (assume sensitive) on error
+            return {
+                "classification": "sensitive",  # Conservative approach
+                "confidence": 0.5,  # Low confidence due to error
+                "contains_sensitive_data": True,  # Assume sensitive on error
+                "column_name": column_name,
+                "error": str(e),
+                "analysis_method": "error_fallback"
+            }
+    
+    def _heuristic_sensitivity_check(self, column_data: pd.Series, column_name: str) -> bool:
+        """
+        Fallback method using simple heuristics to check if a column might contain sensitive data.
+        Used when ML-based analysis fails.
         
-        # Make prediction using extracted features
-        result = self.predict(features)
+        Args:
+            column_data: Series containing column data
+            column_name: Name of the column
+            
+        Returns:
+            Boolean indicating if the column likely contains sensitive data
+        """
+        # Check column name for sensitive keywords
+        sensitive_keywords = [
+            "ssn", "social", "security", "password", "pwd", "secret", "credit", "card", 
+            "ccv", "cvv", "cvc", "pin", "account", "routing", "license", "key", "token",
+            "auth", "address", "phone", "email", "birth", "dob", "gender", "race", "ethnic",
+            "income", "salary", "health", "medical", "disease", "diagnosis", "prescription"
+        ]
         
-        # Add additional information
-        result["column_name"] = column_name
-        result["sample_values"] = column_data.head(3).tolist()
-        result["data_type"] = str(column_data.dtype)
-        
-        return result
+        if any(keyword in column_name.lower() for keyword in sensitive_keywords):
+            return True
+            
+        # Simple pattern checks on a sample of data
+        try:
+            if len(column_data) > 0 and pd.api.types.is_string_dtype(column_data):
+                sample = column_data.dropna().astype(str).sample(min(50, len(column_data))).tolist()
+                
+                # Check for email pattern
+                if any('@' in str(x) and '.' in str(x) for x in sample):
+                    return True
+                    
+                # Check for potential credit card numbers (digits of length 15-16)
+                if any(len(re.sub(r'\D', '', str(x))) in [15, 16] and 
+                        re.sub(r'\D', '', str(x)).isdigit() for x in sample):
+                    return True
+                    
+                # Check for SSN pattern
+                if any(re.search(r'\d{3}[\s-]?\d{2}[\s-]?\d{4}', str(x)) for x in sample):
+                    return True
+        except Exception:
+            pass
+            
+        return False
     
     def _extract_column_features(self, column_data: pd.Series, column_name: str) -> Dict[str, Any]:
         """
@@ -243,35 +324,89 @@ class MLClassifier:
         Returns:
             Dictionary of extracted features
         """
-        # Extract basic statistical features
-        features = {
-            "name_contains_sensitive_keyword": any(keyword in column_name.lower() for keyword in [
-                "ssn", "social", "security", "password", "credit", "card", "cvv", "secret",
-                "address", "phone", "email", "birth", "dob", "gender", "race", "ethnic",
-                "income", "salary", "health", "medical", "account", "license"
-            ]),
-            "unique_ratio": len(column_data.unique()) / len(column_data) if len(column_data) > 0 else 0,
-            "null_ratio": column_data.isnull().mean(),
-            "is_numeric": pd.api.types.is_numeric_dtype(column_data),
-            "is_string": pd.api.types.is_string_dtype(column_data),
-            "is_datetime": pd.api.types.is_datetime64_dtype(column_data),
-            "avg_string_length": column_data.astype(str).str.len().mean() if pd.api.types.is_string_dtype(column_data) else 0,
-        }
-        
-        # Add pattern-based features for string columns
-        if pd.api.types.is_string_dtype(column_data):
-            sample = column_data.dropna().astype(str).sample(min(100, len(column_data))).tolist()
+        try:
+            # Generate a cache key based on column name and hash of data sample
+            # (Using sample to avoid expensive hashing of entire column)
+            sample_for_hash = column_data.head(10).astype(str).sum() if len(column_data) > 0 else ''
+            cache_key = f"{column_name}_{hash(sample_for_hash)}"
             
-            # Check for common patterns in the sample
-            features.update({
-                "contains_email_pattern": any('@' in str(x) and '.' in str(x).split('@')[-1] for x in sample),
-                "contains_phone_pattern": any(len(str(x).replace('-', '').replace('(', '').replace(')', '').replace(' ', '')) >= 10 and 
-                                            str(x).replace('-', '').replace('(', '').replace(')', '').replace(' ', '').isdigit() for x in sample),
-                "contains_ssn_pattern": any(len(str(x).replace('-', '')) == 9 and str(x).replace('-', '').isdigit() for x in sample),
-                "contains_credit_card_pattern": any(len(str(x).replace('-', '').replace(' ', '')) >= 15 and 
-                                                str(x).replace('-', '').replace(' ', '').isdigit() for x in sample),
-                "contains_address_pattern": any(('street' in str(x).lower() or 'ave' in str(x).lower() or 
-                                              'road' in str(x).lower() or 'dr' in str(x).lower()) for x in sample)
-            })
-        
-        return features
+            # Check if we have cached features for this column (not implemented in this simple version)
+            # but would be useful for repeated analysis of the same columns
+            
+            # Extract basic statistical features with proper error handling
+            features = {
+                "name_contains_sensitive_keyword": any(keyword in column_name.lower() for keyword in [
+                    "ssn", "social", "security", "password", "credit", "card", "cvv", "secret",
+                    "address", "phone", "email", "birth", "dob", "gender", "race", "ethnic",
+                    "income", "salary", "health", "medical", "account", "license"
+                ]),
+                "unique_ratio": len(column_data.unique()) / len(column_data) if len(column_data) > 0 else 0,
+                "null_ratio": column_data.isnull().mean(),
+                "is_numeric": pd.api.types.is_numeric_dtype(column_data),
+                "is_string": pd.api.types.is_string_dtype(column_data),
+                "is_datetime": pd.api.types.is_datetime64_dtype(column_data),
+            }
+            
+            # Safely compute average string length
+            try:
+                if pd.api.types.is_string_dtype(column_data) and len(column_data) > 0:
+                    features["avg_string_length"] = column_data.astype(str).str.len().mean()
+                else:
+                    features["avg_string_length"] = 0
+            except Exception as e:
+                logger.warning(f"Error calculating average string length for column {column_name}: {str(e)}")
+                features["avg_string_length"] = 0
+            
+            # Add pattern-based features for string columns
+            if pd.api.types.is_string_dtype(column_data):
+                try:
+                    # Use a safe sampling method that handles edge cases
+                    sample_size = min(100, len(column_data))
+                    if sample_size > 0 and not column_data.dropna().empty:
+                        sample = column_data.dropna().astype(str).sample(sample_size).tolist()
+                    else:
+                        sample = []
+                    
+                    # Helper function to clean strings for pattern matching
+                    def clean_string(x):
+                        return str(x).replace('-', '').replace('(', '').replace(')', '').replace(' ', '')
+                    
+                    # Check for common patterns in the sample
+                    features.update({
+                        "contains_email_pattern": any('@' in str(x) and '.' in str(x).split('@')[-1] for x in sample),
+                        "contains_phone_pattern": any(len(clean_string(x)) >= 10 and clean_string(x).isdigit() for x in sample),
+                        "contains_ssn_pattern": any(len(str(x).replace('-', '')) == 9 and str(x).replace('-', '').isdigit() for x in sample),
+                        "contains_credit_card_pattern": any(len(clean_string(x)) >= 15 and clean_string(x).isdigit() for x in sample),
+                        "contains_address_pattern": any(('street' in str(x).lower() or 'ave' in str(x).lower() or 
+                                                  'road' in str(x).lower() or 'dr' in str(x).lower()) for x in sample)
+                    })
+                except Exception as e:
+                    logger.warning(f"Error extracting pattern features for column {column_name}: {str(e)}")
+                    # Set default values for pattern features if extraction fails
+                    features.update({
+                        "contains_email_pattern": False,
+                        "contains_phone_pattern": False,
+                        "contains_ssn_pattern": False,
+                        "contains_credit_card_pattern": False,
+                        "contains_address_pattern": False
+                    })
+            
+            return features
+        except Exception as e:
+            logger.error(f"Error extracting features from column {column_name}: {str(e)}")
+            # Return a minimal feature set on error to avoid breaking the pipeline
+            return {
+                "name_contains_sensitive_keyword": False,
+                "unique_ratio": 0,
+                "null_ratio": 1.0,
+                "is_numeric": False,
+                "is_string": False,
+                "is_datetime": False,
+                "avg_string_length": 0,
+                "contains_email_pattern": False,
+                "contains_phone_pattern": False,
+                "contains_ssn_pattern": False,
+                "contains_credit_card_pattern": False,
+                "contains_address_pattern": False,
+                "error_occurred": True
+            }

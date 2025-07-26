@@ -85,14 +85,15 @@ class MonitoringAgent(BaseAgent):
     - Prioritized alerts for dashboard
     """
     
-    @validate_arguments
+    @validate_arguments(config=dict(arbitrary_types_allowed=True))
     def __init__(self, 
                  config: Optional[MonitoringAgentConfig] = None,
                  log_ingestion_module: Optional[Any] = None,
                  anomaly_detection_module: Optional[Any] = None,
                  alert_module: Optional[Any] = None,
                  compliance_checker_module: Optional[Any] = None,
-                 remediation_module: Optional[Any] = None):
+                 remediation_module: Optional[Any] = None,
+                 app: Optional[Flask] = None):
         """
         Initialize the Monitoring Agent with dependency injection.
         
@@ -104,6 +105,7 @@ class MonitoringAgent(BaseAgent):
         """
         # Set config first, as it's used by the modules
         self.config = config or MonitoringAgentConfig()
+        self.app = app
 
         logger.debug("Monitoring agent initializing specialized components")
 
@@ -122,13 +124,8 @@ class MonitoringAgent(BaseAgent):
             from AIComplianceMonitoring.agents.monitoring.alert_module import AlertModule
             logger.debug("AlertModule imported successfully")
 
-            # Initialize compliance checker module
-            if compliance_checker_module is None:
-                logger.debug("Initializing ComplianceChecker...")
-                from AIComplianceMonitoring.agents.monitoring.compliance_checker import ComplianceChecker
-                self.compliance_checker_module = ComplianceChecker(config={})
-            else:
-                self.compliance_checker_module = compliance_checker_module
+            # Compliance checker is initialized in _initialize_resources, once app context is available.
+            self.compliance_checker_module = compliance_checker_module
                 
             # Initialize the remediation module
             if remediation_module is None:
@@ -169,8 +166,15 @@ class MonitoringAgent(BaseAgent):
         # Initialize alert database
         self.alert_module.initialize_alert_db()
         
-        # Initialize Flask app
-        self.app = self._create_flask_app()
+        # Initialize Flask app if not already provided
+        if self.app is None:
+            self.app = self._create_flask_app()
+
+        # Initialize the compliance checker now that we have an app context
+        if self.compliance_checker_module is None:
+            logger.debug("Initializing ComplianceChecker with app context...")
+            from AIComplianceMonitoring.agents.monitoring.compliance_checker import ComplianceChecker
+            self.compliance_checker_module = ComplianceChecker(app=self.app)
     
     def _cleanup_resources(self):
         """Clean up resources used by the monitoring agent"""
@@ -366,15 +370,29 @@ class MonitoringAgent(BaseAgent):
         self.app.run(host=host, port=port, debug=False)
 
 
+def create_monitoring_agent_service(app: Flask) -> MonitoringAgent:
+    """Factory function to create a MonitoringAgent instance with app context."""
+    logger.info("Creating Monitoring Agent service with existing Flask app context...")
+    config = MonitoringAgentConfig()
+    # Pass the UI app instance to the monitoring agent
+    agent = MonitoringAgent(config=config, app=app)
+    return agent
+
+
 if __name__ == '__main__':
+    # This block is for standalone execution, which is now discouraged.
+    # The agent should be run from the main UI app to share context.
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     )
-    logger.info("Initializing Monitoring Agent as a service...")
+    logger.warning("Running Monitoring Agent in standalone mode.")
+    logger.warning("Database-dependent features like compliance stats will NOT work.")
     
     try:
         config = MonitoringAgentConfig()
+        # In standalone mode, we don't have a shared app context.
+        # The ComplianceChecker will be initialized with app=None.
         agent = MonitoringAgent(config=config)
         agent.run(host='0.0.0.0', port=5001)
     except Exception as e:

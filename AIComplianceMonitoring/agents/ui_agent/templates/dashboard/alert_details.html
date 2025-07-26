@@ -1,32 +1,76 @@
 {% extends "base.html" %}
 
-{% block title %}Alert Details - {{ super() }}{% endblock %}
+{% block title %}{{ gettext('Alert Details') }} - {{ super() }}{% endblock %}
 
 {% block content %}
-<div class="container">
-    <h1>Alert Details</h1>
-    {% if alert %}
-    <div class="card">
-        <div class="card-header">
-            <h5 class="card-title">Alert #{{ alert.id }}</h5>
+<!-- Main Header -->
+<div class="main-header">
+    <h1 class="page-title">{{ gettext('Alert') }} #{{ alert.id }}</h1>
+    <div class="header-actions">
+        <button class="btn list-action-btn"><i class="fas fa-history me-1"></i> {{ gettext('View History') }}</button>
+        <button class="btn create-btn">{{ gettext('Take Action') }}</button>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Main Content -->
+    <div class="col-lg-8">
+        <div class="content-list-wrapper mb-4">
+            <div class="list-header">
+                <h4><i class="fas fa-file-alt me-2"></i>{{ gettext('Alert Description') }}</h4>
+            </div>
+            <div class="alert-description-body">
+                <p>{{ alert.details | safe }}</p>
+            </div>
         </div>
-        <div class="card-body">
-            <p><strong>Date:</strong> {{ alert.date }}</p>
-            <p><strong>Severity:</strong> <span class="badge bg-{{ alert.severity | lower }}">{{ alert.severity | capitalize }}</span></p>
-            <p><strong>Message:</strong> {{ alert.message | safe }}</p>
-            <hr>
-            <p><strong>Details:</strong></p>
-            <p>{{ alert.details | safe }}</p>
-        </div>
-        <div class="card-footer">
-            <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">Back to Dashboard</a>
+
+        <div class="content-list-wrapper">
+            <div class="list-header">
+                <h4><i class="fas fa-cogs me-2"></i>{{ gettext('Recommended Actions') }}</h4>
+            </div>
+            <div class="alert-actions-body">
+                <ul>
+                    <li>{{ gettext('Isolate the affected user account immediately.') }}</li>
+                    <li>{{ gettext('Review user access logs for the past 7 days.') }}</li>
+                    <li>{{ gettext('Confirm if the access was legitimate with the user\'s manager.') }}</li>
+                </ul>
+            </div>
         </div>
     </div>
-    {% else %}
-    <div class="alert alert-warning" role="alert">
-        Alert not found or no details available.
+
+    <!-- Sidebar -->
+    <div class="col-lg-4">
+        <div class="content-list-wrapper">
+            <div class="list-header">
+                <h4><i class="fas fa-info-circle me-2"></i>{{ gettext('Details') }}</h4>
+            </div>
+            <div class="alert-metadata">
+                <div class="metadata-item">
+                    <span class="metadata-label">{{ gettext('Severity') }}</span>
+                    <span class="severity-indicator severity-{{ alert.severity.lower() }}">{{ alert.severity }}</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">{{ gettext('Status') }}</span>
+                    <span>{{ gettext('New') }}</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">{{ gettext('Timestamp') }}</span>
+                    <span>{{ alert.date }}</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">{{ gettext('Affected File') }}</span>
+                    <span>Q4-Financials.xlsx</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">{{ gettext('Source IP') }}</span>
+                    <span>192.168.1.100</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">{{ gettext('User') }}</span>
+                    <span>john.doe</span>
+                </div>
+            </div>
+        </div>
     </div>
-    <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">Back to Dashboard</a>
-    {% endif %}
 </div>
 {% endblock %}

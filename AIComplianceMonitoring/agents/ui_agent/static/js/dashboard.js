@@ -1,9 +1,40 @@
 document.addEventListener('DOMContentLoaded', function () {
+    // Function to show notifications
+    function showNotification(message, type = 'info') {
+        const container = document.querySelector('.container-fluid');
+        if (!container) return;
+
+        const alertType = type === 'error' ? 'danger' : type;
+        const notificationHtml = `
+            <div class="alert alert-${alertType} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        `;
+        
+        // Remove any existing alerts before showing a new one
+        const existingAlert = container.querySelector('.alert');
+        if (existingAlert) {
+            existingAlert.remove();
+        }
+
+        container.insertAdjacentHTML('afterbegin', notificationHtml);
+
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            const alert = container.querySelector('.alert');
+            if (alert) {
+                const bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            }
+        }, 5000);
+    }
+
     // Function to fetch compliance data from the API
     async function fetchComplianceData() {
         try {
             // TEMPORARY: Using test endpoint that bypasses authentication
-            const response = await fetch('/api/compliance_data');
+            const response = await fetch('/test_compliance_data');
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -59,53 +90,50 @@ document.addEventListener('DOMContentLoaded', function () {
     // Function to update the key metrics
     function updateKeyMetrics(data) {
         if (!data) return;
-        console.log('updateKeyMetrics received:', data);
-        
-        try {
-            let metrics = {};
-            // Check for different data structures and normalize
-            if (data.key_metrics) {
-                // Handle nested structure with key_metrics object
-                metrics = data.key_metrics;
-            } else {
-                // Handle flat structure (from old mock data or new report)
-                metrics = data;
-            }
 
-            document.getElementById('sensitive-files-count').textContent = metrics.sensitive_files || '-';
-            document.getElementById('total-scans-count').textContent = metrics.total_scans || '-';
-            
-            // Handle risk level
+        const safeUpdate = (id, value) => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = value || '-';
+            }
+        };
+
+        try {
+            const metrics = data.key_metrics || data;
+            if (!metrics) return;
+
+            safeUpdate('sensitive-files-count', metrics.sensitive_files);
+            safeUpdate('total-scans-count', metrics.total_scans);
+
             let riskLevel = metrics.risk_level || '-';
             if (typeof riskLevel === 'number') {
-                riskLevel = riskLevel === 3 ? 'High' : riskLevel === 2 ? 'Medium' : 'Low';
+                riskLevel = riskLevel === 3 ? 'High' : (riskLevel === 2 ? 'Medium' : 'Low');
             }
-            document.getElementById('risk-level').textContent = riskLevel;
+            safeUpdate('risk-level-status', riskLevel);
 
-            // Handle last scan date - **THE KEY FIX**
-            // Prioritize 'created_at' from the new report format
-            let lastScanDate = '-';
-            if (metrics.created_at) {
-                lastScanDate = new Date(metrics.created_at).toLocaleString();
-            } else if (metrics.last_scan_date) { // Fallback for old mock data
-                lastScanDate = new Date(metrics.last_scan_date).toLocaleString();
-            } else if (metrics.last_scan) { // Check for last_scan from API response
-                lastScanDate = new Date(metrics.last_scan).toLocaleString();
+            const lastScanDate = metrics.last_scan_date;
+            if (lastScanDate && lastScanDate !== 'N/A') {
+                // Correctly parse UTC and display in user's local time
+                const utcDate = new Date(lastScanDate.replace(' ', 'T') + 'Z');
+                if (!isNaN(utcDate.getTime())) {
+                    const localDateString = utcDate.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'medium' });
+                    safeUpdate('last-scan-date', localDateString);
+                } else {
+                    safeUpdate('last-scan-date', 'Invalid Date');
+                }
+            } else {
+                safeUpdate('last-scan-date', 'N/A');
             }
-            document.getElementById('last-scan-date').textContent = lastScanDate;
 
         } catch (error) {
             console.error('Error updating key metrics:', error);
-            // Set all metrics to '-' on error to avoid broken UI
-            document.getElementById('sensitive-files-count').textContent = '-';
-            document.getElementById('total-scans-count').textContent = '-';
-            document.getElementById('risk-level').textContent = '-';
-            document.getElementById('last-scan-date').textContent = '-';
         }
     }
 
     // Function to render the sensitive data types chart
     function renderDataTypesChart(data) {
+        const canvas = document.getElementById('sensitive-data-types-chart');
+        if (!canvas) return; // Don't run if the chart element isn't on the page
         if (!data) return;
         
         // Get sensitive data types, handling both nested and flat structures
@@ -124,7 +152,7 @@ document.addEventListener('DOMContentLoaded', function () {
             console.log('No sensitive data types found, using defaults');
         }
         
-        const ctx = document.getElementById('dataTypesChart').getContext('2d');
+        const ctx = document.getElementById('sensitive-data-types-chart').getContext('2d');
         new Chart(ctx, {
             type: 'doughnut',
             data: {
@@ -164,6 +192,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Function to render the compliance status chart
     function renderComplianceStatusChart(data) {
+        const canvas = document.getElementById('compliance-status-chart');
+        if (!canvas) return; // Don't run if the chart element isn't on the page
         if (!data) return;
         
         // Get compliance status, handling both nested and flat structures
@@ -180,7 +210,7 @@ document.addEventListener('DOMContentLoaded', function () {
             console.log('No compliance status found, using defaults');
         }
         
-        const ctx = document.getElementById('complianceStatusChart').getContext('2d');
+        const ctx = document.getElementById('compliance-status-chart').getContext('2d');
         new Chart(ctx, {
             type: 'bar',
             data: {
@@ -218,38 +248,51 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Function to populate the recent alerts table
     function populateAlertsTable(data) {
-        if (!data) return;
-        const tableBody = document.getElementById('recent-alerts-table');
+        const tableBody = document.getElementById('alerts-table-body');
+        if (!tableBody) return; // Don't run if the table isn't on the page
+
         tableBody.innerHTML = ''; // Clear existing rows
-        
-        // Check if recent_alerts exists
-        if (!data.recent_alerts || !Array.isArray(data.recent_alerts) || data.recent_alerts.length === 0) {
-            console.log('No recent alerts found in data');
-            // Add a placeholder row
-            tableBody.innerHTML = `
-                <tr>
-                    <td colspan="3" class="text-center">No recent alerts</td>
-                </tr>
-            `;
+
+        const alerts = data.recent_alerts || [];
+        if (!Array.isArray(alerts) || alerts.length === 0) {
+            console.log('No recent alerts to display.');
+            const row = tableBody.insertRow();
+            const cell = row.insertCell();
+            cell.colSpan = 5;
+            cell.textContent = 'No recent alerts found.';
+            cell.style.textAlign = 'center';
             return;
         }
-        
-        // Process alerts
-        data.recent_alerts.forEach(alert => {
-            const severityClass = {
-                'High': 'text-danger',
-                'Medium': 'text-warning',
-                'Low': 'text-info'
-            }[alert.severity] || 'text-secondary';
 
-            const row = `
-                <tr>
-                    <td>${alert.timestamp}</td>
-                    <td>${alert.message}</td>
-                    <td><span class="${severityClass}">${alert.severity}</span></td>
-                </tr>
-            `;
-            tableBody.innerHTML += row;
+        alerts.forEach(alert => {
+            const row = tableBody.insertRow();
+
+            // Column 1: Description
+            const descCell = row.insertCell(0);
+            descCell.innerHTML = `
+                <div class="alert-description">
+                    <span class="fw-bold">${alert.message || 'No message'}</span>
+                    <span class="text-muted d-block">${alert.location || 'Unknown Location'}</span>
+                </div>`;
+
+            // Column 2: Date
+            const dateCell = row.insertCell(1);
+            dateCell.textContent = alert.timestamp ? new Date(alert.timestamp).toLocaleString() : 'N/A';
+
+            // Column 3: Severity
+            const severityCell = row.insertCell(2);
+            const severity = alert.severity || 'Unknown';
+            severityCell.innerHTML = `<span class="severity-indicator severity-${severity.toLowerCase()}">${severity}</span>`;
+
+            // Column 4: Status
+            const statusCell = row.insertCell(3);
+            const status = alert.status || 'New';
+            statusCell.innerHTML = `<span class="status-indicator ${status.toLowerCase().replace(' ', '-')}">${status}</span>`;
+
+            // Column 5: Actions
+            const actionCell = row.insertCell(4);
+            const alertId = alert.id || new Date(alert.timestamp).getTime();
+            actionCell.innerHTML = `<a href="/dashboard/alert/${alertId}" class="btn-view-details"><i class="fas fa-chevron-right"></i></a>`;
         });
     }
 
@@ -257,7 +300,6 @@ document.addEventListener('DOMContentLoaded', function () {
     function showMockDataIndicator(isMockData, timestamp) {
         console.log('showMockDataIndicator called with:', isMockData, timestamp);
         
-        // Get or create the indicator element
         let indicator = document.getElementById('mock-data-indicator');
         if (!indicator) {
             indicator = document.createElement('div');
@@ -275,67 +317,83 @@ document.addEventListener('DOMContentLoaded', function () {
             document.body.appendChild(indicator);
         }
         
-        // For testing purposes, always show the indicator
-        // Remove this line in production
-        // isMockData = true;
-        
         if (isMockData) {
             let timeDisplay = timestamp ? ` (${timestamp})` : '';
             indicator.textContent = `Demo Mode${timeDisplay}`;
             indicator.style.display = 'block';
-            console.log('Mock data indicator shown with text:', indicator.textContent);
         } else {
             indicator.style.display = 'none';
-            console.log('Mock data indicator hidden');
         }
     }
 
-    /**
-     * Main function to initialize the dashboard
-     * 
-     * This function handles:
-     * 1. Fetching compliance data from the API
-     * 2. Detecting if the data is mock data (using is_mock_data flag)
-     * 3. Showing the "Demo Mode" badge when mock data is detected
-     * 4. Updating all UI components with the fetched data
-     */
+    // Function to handle scan button click
+    function handleRunScan() {
+        const runScanBtn = document.getElementById('run-scan-btn');
+        if (!runScanBtn) return;
+        
+        runScanBtn.addEventListener('click', async function() {
+            runScanBtn.disabled = true;
+            runScanBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Starting scan...';
+            
+            try {
+                const response = await fetch('/run_scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                
+                const result = await response.json();
+                showNotification(result.message, 'success');
+                
+                setTimeout(() => { initializeDashboard(); }, 5000);
+                
+            } catch (error) {
+                console.error('Error running scan:', error);
+                showNotification('Error starting scan. Please try again later.', 'error');
+            } finally {
+                runScanBtn.disabled = false;
+                runScanBtn.innerHTML = '<i class="fas fa-search me-1"></i>Run Scan';
+            }
+        });
+    }
+
+    // Function to handle report creation button click
+    function handleCreateReport() {
+        const createReportBtn = document.getElementById('create-report-btn');
+        if (!createReportBtn) return;
+
+        createReportBtn.addEventListener('click', () => {
+            showNotification('Creating report...', 'info');
+            
+            fetch('/reports/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showNotification(data.message, 'success');
+                } else {
+                    showNotification(`Error: ${data.message}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error creating report:', error);
+                showNotification('An unexpected error occurred.', 'error');
+            });
+        });
+    }
+
+    // Main function to initialize the dashboard
     async function initializeDashboard() {
         const data = await fetchComplianceData();
         if (data) {
-            // For debugging - log the entire data object to help diagnose structure issues
-            console.log('Full data object:', JSON.stringify(data));
+            const isMockData = data.is_mock_data === true;
+            const mockTimestamp = data.mock_generated_at || null;
             
-            /**
-             * Mock Data Detection Logic
-             * 
-             * We use strict equality (===) to check for the is_mock_data flag
-             * This avoids issues with truthy/falsy values that might be misinterpreted
-             * 
-             * The flag can be at either:
-             * - Top level of the response (data.is_mock_data)
-             * - Inside a nested data property (data.data.is_mock_data)
-             */
-            const isMockData = data.is_mock_data === true || 
-                             (data.data && data.data.is_mock_data === true) || 
-                             false;
-            
-            /**
-             * Mock Data Timestamp
-             * 
-             * When mock data is used, we display the timestamp when it was generated
-             * This helps users understand that they're looking at non-real-time data
-             * and when that mock data was created
-             */
-            const mockTimestamp = data.mock_generated_at || 
-                                (data.data && data.data.mock_generated_at) || 
-                                null;
-            
-            console.log('Mock data status:', isMockData, mockTimestamp);
-            
-            // Show mock data indicator only if the data is actually mock data
             showMockDataIndicator(isMockData, mockTimestamp);
             
-            // Update all UI components with the fetched data
             updateKeyMetrics(data);
             renderDataTypesChart(data);
             renderComplianceStatusChart(data);
@@ -343,5 +401,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    // Initialize dashboard and set up event handlers
     initializeDashboard();
+    handleRunScan();
+    handleCreateReport();
 });

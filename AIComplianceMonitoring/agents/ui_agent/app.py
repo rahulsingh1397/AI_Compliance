@@ -1,14 +1,18 @@
 import logging
+import os
 import traceback
-from datetime import timedelta
+from datetime import timedelta, datetime
+import json
 
-from flask import Flask, session, request, redirect, url_for
-from flask_login import current_user
+from flask import Flask, render_template, redirect, url_for, request, flash, jsonify
+from flask_login import current_user, login_required
 from flask_migrate import Migrate
+import threading
+from AIComplianceMonitoring.agents.monitoring.agent import create_monitoring_agent_service
 
-# Use relative imports to fix module paths
-from . import config
-from .extensions import db, login_manager, babel # Import extensions from central file
+from AIComplianceMonitoring.agents.ui_agent import config
+from AIComplianceMonitoring.agents.ui_agent.extensions import db, login_manager, babel # Import extensions from central file
+from AIComplianceMonitoring.agents.ui_agent.formatters import format_timestamp as fmt_timestamp, format_file_size
 
 # No top-level model imports or user_loader definitions here
 
@@ -31,172 +35,197 @@ def create_app():
     @login_manager.user_loader
     def load_user(user_id):
         # Import model locally to avoid circular dependency
-        from .models import User
-        return User.query.get(int(user_id))
+        from AIComplianceMonitoring.agents.ui_agent import models
+        return models.User.query.get(int(user_id))
 
-    # 4. Import and register blueprints with relative import paths
-    from .main import main_bp
-    from .auth import auth_bp
-    from .dashboard import dashboard_bp
-    from .settings import settings_bp
-    from .api import api_bp
-    
-    app.register_blueprint(main_bp)
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(dashboard_bp)
-    app.register_blueprint(settings_bp)
-    app.register_blueprint(api_bp, url_prefix='/api')
+    # 4. Register custom template filters
+    app.jinja_env.filters['datetime'] = fmt_timestamp
+    app.jinja_env.filters['filesize'] = format_file_size
 
-    # 5. Add root redirect
+    # 5. Register blueprints
+    register_blueprints(app)
+
+    # 6. Add root redirect
     @app.route('/', endpoint='index')
     def index_redirect():
         return redirect(url_for('dashboard.index'))
         
     # TEMPORARY: Direct test endpoint to debug dashboard data issues
     @app.route('/test_compliance_data')
+    @login_required
     def test_compliance_data():
-        """Direct test endpoint for compliance data without auth requirement."""
-        from flask import jsonify
-        import requests
-        import logging
-        import os
+        from .utils import fetch_live_compliance_data
+        live_data = fetch_live_compliance_data()
+        return jsonify(live_data)
+
+    @app.route('/run_scan', methods=['POST'])
+    @login_required
+    def run_scan():
+        """Triggers a new data scan in a background thread."""
+        from threading import Thread
         import traceback
-        import json
         from datetime import datetime
-        
-        log = logging.getLogger(__name__)
-        print("\n\nCONSOLE: Test compliance data endpoint accessed")
-        
-        # Use mock data as fallback if API calls fail
-        def get_mock_data():
-            print("CONSOLE: Using mock data as fallback")
-            return {
-                'key_metrics': {
-                    'sensitive_files': 42,
-                    'total_scans': 150,
-                    'risk_level': 'Medium',
-                    'last_scan_date': '2025-06-25 15:30:00'
-                },
-                'sensitive_data_types': {
-                    'High Priority': 3,
-                    'Medium Priority': 12,
-                    'Low Priority': 27
-                },
-                'compliance_status': {'GDPR': 95, 'CCPA': 88, 'HIPAA': 92},
-                'recent_alerts': [
-                    {'timestamp': '2025-06-25 15:30:00', 'message': 'Mock alert 1', 'severity': 'High'},
-                    {'timestamp': '2025-06-25 14:25:00', 'message': 'Mock alert 2', 'severity': 'Medium'}
-                ]
-            }
-        
-        try:
-            DEFAULT_API_URL = "http://127.0.0.1:5001"
-            monitoring_api_url = os.environ.get('MONITORING_API_BASE_URL') or DEFAULT_API_URL
-            print(f"CONSOLE: Using Monitoring API URL: {monitoring_api_url}")
+        from .models import ScanHistory, db
+
+        def scan_in_background():
+            scan_id = f"scan_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            print(f"BACKGROUND SCAN [{scan_id}]: Starting comprehensive data discovery scan...")
             
-            try:
-                # Fetch stats and alerts from the Monitoring API
-                print(f"CONSOLE: Sending request to {monitoring_api_url}/stats")
-                stats_response = requests.get(f"{monitoring_api_url}/stats", timeout=5)
-                print(f"CONSOLE: Stats response status: {stats_response.status_code}")
-                
-                print(f"CONSOLE: Sending request to {monitoring_api_url}/alerts")
-                alerts_response = requests.get(f"{monitoring_api_url}/alerts?limit=5", timeout=5)
-                print(f"CONSOLE: Alerts response status: {alerts_response.status_code}")
-                
-                # Check for HTTP errors
-                stats_response.raise_for_status()
-                alerts_response.raise_for_status()
-                
-                # Extract the 'data' payload from the responses
-                stats_payload = stats_response.json().get('data', {})
-                alerts_payload = alerts_response.json().get('data', [])
-                
-                print(f"CONSOLE: Stats payload: {json.dumps(stats_payload, indent=2)}")
-                print(f"CONSOLE: Alerts payload: {json.dumps(alerts_payload[:2], indent=2)}")
-                
-                # Extract stats from different modules
-                ingestion_stats = stats_payload.get('ingestion', {})
-                detection_stats = stats_payload.get('detection', {})
-                alert_stats = stats_payload.get('alerts', {})
-                
-                # Format alerts for the frontend
-                recent_alerts = [{
-                    'timestamp': format_timestamp(alert.get('timestamp')),
-                    'message': alert.get('message', 'No message provided'),
-                    'severity': alert.get('priority', 'unknown').capitalize()
-                } for alert in alerts_payload]
-                
-                # Key metrics
-                alerts_by_priority = alert_stats.get('alerts_by_priority', {})
-                risk_level = "Low"
-                if alerts_by_priority.get('high', 0) > 0:
-                    risk_level = "High"
-                elif alerts_by_priority.get('medium', 0) > 0:
-                    risk_level = "Medium"
+            # Use app context for database operations in background thread
+            with app.app_context():
+                try:
+                    # Create scan history record
+                    scan_record = ScanHistory(
+                        scan_id=scan_id,
+                        start_time=datetime.utcnow(),
+                        status='running',
+                        files_scanned=0,
+                        sensitive_files_found=0
+                    )
                     
-                key_metrics = {
-                    'sensitive_files': detection_stats.get('sensitive_files_found', 0),
-                    'total_scans': ingestion_stats.get('total_scans', 0),
-                    'risk_level': risk_level,
-                    'last_scan_date': format_timestamp(alert_stats.get('newest_alert'))
-                }
-                
-                # Data types chart data
-                sensitive_data_types = {
-                    'High Priority': alerts_by_priority.get('high', 0),
-                    'Medium Priority': alerts_by_priority.get('medium', 0),
-                    'Low Priority': alerts_by_priority.get('low', 0)
-                }
-                
-                # Mock compliance status for now
-                compliance_status = {'GDPR': 95, 'CCPA': 88, 'HIPAA': 92}
-                
-                # Final data structure
-                final_data = {
-                    'key_metrics': key_metrics,
-                    'sensitive_data_types': sensitive_data_types,
-                    'compliance_status': compliance_status,
-                    'recent_alerts': recent_alerts
-                }
-                
-                print(f"CONSOLE: Returning live API data with metrics: {key_metrics}")
-                return jsonify(final_data)
-                
-            except requests.RequestException as e:
-                print(f"CONSOLE ERROR: API request failed: {type(e).__name__}: {e}")
-                # Use mock data if API calls fail
-                return jsonify(get_mock_data())
+                    db.session.add(scan_record)
+                    db.session.commit()
+                    print(f"BACKGROUND SCAN [{scan_id}]: Scan record created")
+                    
+                    # Get data directory
+                    data_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'data'))
+                    print(f"BACKGROUND SCAN [{scan_id}]: Target directory: {data_directory}")
+                    
+                    if not os.path.exists(data_directory):
+                        raise FileNotFoundError(f"Data directory not found: {data_directory}")
+                    
+                    # Initialize Data Discovery Agent
+                    print(f"BACKGROUND SCAN [{scan_id}]: Initializing Data Discovery Agent...")
+                    from AIComplianceMonitoring.agents.data_discovery.agent import DataDiscoveryAgent, AgentConfig
+                    
+                    # Configure the agent for this scan
+                    config = AgentConfig(
+                        max_workers=4,  # Limit workers to avoid overwhelming the system
+                        sample_size=500  # Reasonable sample size for performance
+                    )
+                    
+                    # Use context manager for proper resource management
+                    with DataDiscoveryAgent(config=config) as agent:
+                        print(f"BACKGROUND SCAN [{scan_id}]: Running batch file scan...")
+                        
+                        # Run comprehensive scan using Data Discovery Agent
+                        scan_results = agent.batch_scan_files(
+                            directory_path=data_directory,
+                            file_extensions=['.csv', '.txt', '.json', '.xlsx', '.xls'],
+                            max_workers=4
+                        )
+                        
+                        print(f"BACKGROUND SCAN [{scan_id}]: Data Discovery Agent scan completed")
+                        print(f"BACKGROUND SCAN [{scan_id}]: Results: {scan_results.get('total_files_scanned', 0)} files, {scan_results.get('sensitive_files_found', 0)} sensitive files")
+                        
+                        # Update scan record with actual results
+                        scan_record.files_scanned = scan_results.get('total_files_scanned', 0)
+                        scan_record.sensitive_files_found = scan_results.get('sensitive_files_found', 0)
+                        scan_record.end_time = datetime.utcnow()
+                        scan_record.status = 'completed'
+                        
+                        # Store detailed results path if available
+                        if scan_results.get('scan_details'):
+                            results_filename = f"scan_results_{scan_id}.json"
+                            results_path = os.path.join(data_directory, '..', 'results', results_filename)
+                            os.makedirs(os.path.dirname(results_path), exist_ok=True)
+                            
+                            with open(results_path, 'w') as f:
+                                json.dump(scan_results, f, indent=2, default=str)
+                            
+                            scan_record.results_path = results_path
+                            print(f"BACKGROUND SCAN [{scan_id}]: Detailed results saved to {results_path}")
+                    
+                    db.session.commit()
+                    print(f"BACKGROUND SCAN [{scan_id}]: Comprehensive scan completed successfully")
+                    
+                except Exception as e:
+                    print(f"BACKGROUND SCAN [{scan_id}]: Error during scan: {e}")
+                    print(f"BACKGROUND SCAN [{scan_id}]: Traceback: {traceback.format_exc()}")
+                    
+                    # Update scan record with error
+                    try:
+                        scan_record.end_time = datetime.utcnow()
+                        scan_record.status = 'failed'
+                        db.session.commit()
+                    except Exception as db_error:
+                        print(f"BACKGROUND SCAN [{scan_id}]: Failed to update scan record: {db_error}")
+                finally:
+                    db.session.close()
+
+        # Run the scan in a background thread to avoid blocking the UI
+        thread = Thread(target=scan_in_background)
+        thread.daemon = True
+        thread.start()
+
+        return jsonify({'status': 'success', 'message': 'Scan initiated successfully. Results will be available upon completion.'})
+
+    @app.route('/test_scan', methods=['GET'])
+    @login_required
+    def test_scan():
+        """Test scan functionality without threading for debugging."""
+        try:
+            from .models import ScanHistory, db
+            from datetime import datetime
+            
+            # Get data directory
+            data_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'data'))
+            
+            if not os.path.exists(data_directory):
+                return jsonify({'error': f'Data directory not found: {data_directory}'})
+            
+            # List files in directory
+            files_found = []
+            for root, dirs, files in os.walk(data_directory):
+                for file in files:
+                    if file.lower().endswith(('.csv', '.txt', '.json', '.xlsx', '.xls')):
+                        files_found.append(os.path.join(root, file))
+            
+            # Test database connection
+            scan_count = ScanHistory.query.count()
+            
+            return jsonify({
+                'status': 'success',
+                'data_directory': data_directory,
+                'files_found': len(files_found),
+                'file_list': files_found[:5],  # First 5 files
+                'existing_scans': scan_count,
+                'database_working': True
+            })
             
         except Exception as e:
-            # Comprehensive error logging
-            print(f"CONSOLE ERROR: Unexpected error: {type(e).__name__}: {e}")
-            print(f"CONSOLE ERROR: Traceback: {traceback.format_exc()}")
-            
-            # Still return mock data even after unexpected errors
-            try:
-                return jsonify(get_mock_data())
-            except:
-                return jsonify({"error": "Critical error generating response"}), 500
-    
-    def format_timestamp(iso_string):
-        """Helper to format timestamps"""
-        if not iso_string:
-            return "N/A"
-        try:
-            if iso_string.endswith('Z'):
-                iso_string = iso_string[:-1] + '+00:00'
-            dt_object = datetime.fromisoformat(iso_string)
-            return dt_object.strftime('%Y-%m-%d %H:%M:%S')
-        except (ValueError, TypeError):
-            return "Invalid Date"
+            import traceback
+            return jsonify({
+                'status': 'error',
+                'error': str(e),
+                'traceback': traceback.format_exc()
+            })
 
-    # 6. Register error handlers and request hooks
+    # 7. Start Monitoring Agent Service in a background thread
+    # The check prevents the thread from starting twice in debug mode
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
+        monitoring_agent = create_monitoring_agent_service(app)
+        monitor_thread = threading.Thread(target=monitoring_agent.run, kwargs={'host': '0.0.0.0', 'port': 5001})
+        monitor_thread.daemon = True
+        monitor_thread.start()
+        app.logger.info("Monitoring agent service started in background thread.")
+
+    # 8. Register error handlers and request hooks
     register_handlers(app)
 
     return app
 
-# 7. Helper functions (Locale Selector, Handlers)
+# 9. Helper functions (Locale Selector, Handlers)
+def register_blueprints(app):
+    """Register all blueprints for the application."""
+    from .scripts.main import main_bp
+    from . import auth_bp, dashboard_bp, settings_bp, api_bp
+    app.register_blueprint(main_bp)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(dashboard_bp)
+    app.register_blueprint(settings_bp)
+    app.register_blueprint(api_bp, url_prefix='/api')
+
 def get_locale():
     """Selects language for the current request."""
     if current_user.is_authenticated and hasattr(current_user, 'language') and current_user.language:
@@ -226,8 +255,3 @@ def register_handlers(app):
         app.logger.debug(f"Response: {response.status}")
         return response
 
-# 8. Main execution
-if __name__ == '__main__':
-    app = create_app()
-    # Note: Setting debug=True is not recommended for production
-    app.run(host='0.0.0.0', port=5000, debug=True)

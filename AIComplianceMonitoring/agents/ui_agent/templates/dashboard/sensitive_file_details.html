@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - {{ super() }}{% endblock %}
+
+{% block content %}
+<!-- Main Header -->
+<div class="main-header">
+    <div class="header-breadcrumb">
+        <a href="{{ url_for('dashboard.sensitive_files') }}" class="breadcrumb-link">{{ gettext('Sensitive Files') }}</a>
+        <i class="fas fa-chevron-right breadcrumb-separator"></i>
+        <h1 class="page-title">{{ file.name }}</h1>
+    </div>
+    <div class="header-actions">
+        <button class="btn create-btn"><i class="fas fa-download me-1"></i> {{ gettext('Export Details') }}</button>
+    </div>
+</div>
+
+<div class="details-grid">
+    <!-- File Summary Card -->
+    <div class="card info-card">
+        <div class="card-header">{{ gettext('File Summary') }}</div>
+        <div class="card-body">
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">{{ gettext('File Path') }}</span>
+                    <span class="info-value">{{ file.path }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">{{ gettext('Risk Level') }}</span>
+                    <span class="info-value"><span class="severity-indicator severity-{{ file.risk_level.lower() }}">{{ file.risk_level }}</span></span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">{{ gettext('File Size') }}</span>
+                    <span class="info-value">{{ file.size | filesize }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">{{ gettext('Last Accessed') }}</span>
+                    <span class="info-value">{{ file.last_accessed | datetime }}</span>
+                </div>
+                 <div class="info-item">
+                    <span class="info-label">{{ gettext('Data Source') }}</span>
+                    <span class="info-value">{{ file.source }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scan Details Card -->
+    <div class="card info-card">
+        <div class="card-header">{{ gettext('Sensitive Data Found') }}</div>
+        <div class="card-body">
+            {% if file.scan_details and file.scan_details.sensitive_data_types %}
+                <ul class="tag-list">
+                    {% for data_type in file.scan_details.sensitive_data_types %}
+                        <li class="tag">{{ data_type }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>{{ gettext('No specific sensitive data types were identified.') }}</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}

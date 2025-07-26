@@ -1,0 +1,66 @@
+{
+  "directory_path": "E:\\Private\\AI_Compliance\\AIComplianceMonitoring\\data",
+  "total_files_scanned": 6,
+  "successful_scans": 0,
+  "failed_scans": 6,
+  "sensitive_files_found": 0,
+  "sensitive_file_paths": [],
+  "scan_details": {
+    "5000000 HRA Records.csv": {
+      "document_id": "5000000 HRA Records.csv",
+      "file_path": "E:\\Private\\AI_Compliance\\AIComplianceMonitoring\\data\\5000000 HRA Records.csv",
+      "file_name": "5000000 HRA Records.csv",
+      "error": "'type'",
+      "status": "failed",
+      "processing_notes": "Error during processing: 'type'"
+    },
+    "5m Sales Records.csv": {
+      "document_id": "5m Sales Records.csv",
+      "file_path": "E:\\Private\\AI_Compliance\\AIComplianceMonitoring\\data\\5m Sales Records.csv",
+      "file_name": "5m Sales Records.csv",
+      "error": "'type'",
+      "status": "failed",
+      "processing_notes": "Error during processing: 'type'"
+    },
+    "5000000 BT Records.csv": {
+      "document_id": "5000000 BT Records.csv",
+      "file_path": "E:\\Private\\AI_Compliance\\AIComplianceMonitoring\\data\\5000000 BT Records.csv",
+      "file_name": "5000000 BT Records.csv",
+      "error": "'type'",
+      "status": "failed",
+      "processing_notes": "Error during processing: 'type'"
+    },
+    "ip-creditcard-email.csv": {
+      "document_id": "ip-creditcard-email.csv",
+      "file_path": "E:\\Private\\AI_Compliance\\AIComplianceMonitoring\\data\\ip-creditcard-email.csv",
+      "file_name": "ip-creditcard-email.csv",
+      "error": "'type'",
+      "status": "failed",
+      "processing_notes": "Error during processing: 'type'"
+    },
+    "telephone-owned-property.xlsx": {
+      "document_id": "telephone-owned-property.xlsx",
+      "file_path": "E:\\Private\\AI_Compliance\\AIComplianceMonitoring\\data\\telephone-owned-property.xlsx",
+      "file_name": "telephone-owned-property.xlsx",
+      "error": "'type'",
+      "status": "failed",
+      "processing_notes": "Error during processing: 'type'"
+    },
+    "emails.csv": {
+      "document_id": "emails.csv",
+      "file_path": "E:\\Private\\AI_Compliance\\AIComplianceMonitoring\\data\\emails.csv",
+      "file_name": "emails.csv",
+      "error": "'type'",
+      "status": "failed",
+      "processing_notes": "Error during processing: 'type'"
+    }
+  },
+  "total_files_processed": 6,
+  "total_size_processed": 0,
+  "processing_time_seconds": 41.68,
+  "processing_rate_files_sec": 0.14,
+  "processing_rate_mb_sec": 0.0,
+  "sensitive_files": [],
+  "start_time": "2025-07-24 09:17:01",
+  "end_time": "2025-07-24 09:17:43"
+}

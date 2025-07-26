@@ -14,7 +14,7 @@ log.info("Attempting to load api.py with real AlertModule...")
 # Default configuration for the monitoring agent API
 # In a real application, this would come from a more robust config system
 config = {
-    'database_path': os.path.join(os.path.dirname(__file__), '..', '..', '..', 'instance', 'alerts.db'),
+    'database_directory': os.path.join(os.path.dirname(__file__), '..', '..', '..', 'instance'),
     'deduplication_window_seconds': 3600
 }
 

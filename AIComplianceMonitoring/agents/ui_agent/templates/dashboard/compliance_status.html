@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}{{ gettext('Compliance Status') }} - {{ super() }}{% endblock %}
+
+{% block content %}
+<!-- Main Header -->
+<div class="main-header">
+    <h1 class="page-title">{{ title }}</h1>
+    <div class="header-actions">
+        <button class="btn list-action-btn"><i class="fas fa-filter me-1"></i> {{ gettext('Filter by Region') }}</button>
+        <button class="btn create-btn">{{ gettext('Export Report') }}</button>
+    </div>
+</div>
+
+<!-- Compliance Status List -->
+<div class="content-list-wrapper">
+    <div class="list-content">
+        <table class="compliance-list-table" id="compliance-table">
+            <thead>
+                <tr>
+                    <th>{{ gettext('Regulation') }}</th>
+                    <th>{{ gettext('Status') }}</th>
+                    <th>{{ gettext('Controls Assessed') }}</th>
+                    <th>{{ gettext('Controls Passing') }}</th>
+                    <th>{{ gettext('Compliance') }} %</th>
+                    <th>&nbsp;</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for regulation in regulations %}
+                <tr>
+                    <td>
+                        <div class="fw-bold">{{ regulation.name }}</div>
+                        <div class="text-muted small">{{ regulation.region }}</div>
+                    </td>
+                    <td><span class="status-indicator {{ regulation.status.lower().replace(' ', '-') }}">{{ regulation.status }}</span></td>
+                    <td>{{ regulation.controls_assessed }}</td>
+                    <td>{{ regulation.controls_passing }}</td>
+                    <td>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar" role="progressbar" style="width: {{ regulation.compliance_percent }}%%;" aria-valuenow="{{ regulation.compliance_percent }}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </td>
+                    <td>
+                        <a href="#" class="btn-view-details"><i class="fas fa-chevron-right"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

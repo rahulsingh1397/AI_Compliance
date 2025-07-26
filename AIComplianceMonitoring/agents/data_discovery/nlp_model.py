@@ -56,7 +56,7 @@ class NLPModel:
     """
     
     def __init__(self, 
-                 bert_classifier_model_name: str = "distilbert-base-uncased-finetuned-sst-2-english",
+                 bert_classifier_model_name: str = "facebook/bart-large-mnli",
                  bert_ner_model_name: str = "dslim/bert-base-NER", 
                  spacy_model_name: str = "en_core_web_sm",
                  device: Optional[Union[int, str]] = None,
@@ -81,6 +81,9 @@ class NLPModel:
         self._initialize_classifier(bert_classifier_model_name)
         self._initialize_ner_pipelines(bert_ner_model_name, spacy_model_name)
 
+        # Define keywords that indicate sensitive content from the classifier
+        self.candidate_labels = ["sensitive", "not sensitive"]
+
     def _initialize_device(self, device: Optional[Union[int, str]]):
         """Determines and sets the computational device (CPU/GPU)."""
         if device is None:
@@ -103,20 +106,18 @@ class NLPModel:
         model_kwargs = {"torch_dtype": torch.float16} if use_fp16 else {}
 
         try:
-            self.classifier_tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self.classifier_model = AutoModelForSequenceClassification.from_pretrained(model_name, **model_kwargs)
-            self.classifier_pipeline = pipeline(
-                "text-classification",
-                model=self.classifier_model,
-                tokenizer=self.classifier_tokenizer,
+            # For zero-shot, we can pass the model name directly to the pipeline
+            self.classifier = pipeline(
+                "zero-shot-classification",
+                model=model_name,
+                tokenizer=model_name, # Use the same identifier for the tokenizer
                 device=self.device_id,
-                batch_size=self.gpu_batch_size,
-                return_all_scores=True
+                framework="pt"
             )
-            logger.info("BERT classification pipeline initialized successfully.")
+            logger.info("Zero-shot classification pipeline initialized successfully.")
         except Exception as e:
-            logger.error(f"Failed to load BERT classification model '{model_name}': {e}")
-            raise
+            logger.error(f"Failed to load zero-shot classification model '{model_name}': {e}")
+            raise e
 
     def _initialize_ner_pipelines(self, bert_ner_model_name: str, spacy_model_name: str):
         """Initializes BERT and spaCy models and pipelines for Named Entity Recognition."""
@@ -264,7 +265,7 @@ class NLPModel:
         sentences = [sent.text for sent in doc.sents]
         
         # Use the standalone tokenizer instead of pipeline.tokenizer to avoid "Already borrowed" errors
-        tokenizer = self.classifier_tokenizer  # Use the dedicated tokenizer, not pipeline.tokenizer
+        tokenizer = self.classifier.tokenizer  # Use the dedicated tokenizer, not pipeline.tokenizer
         
         chunks = []
         current_chunk_sents = []
@@ -296,18 +297,19 @@ class NLPModel:
             # Ensure each chunk is within token limits
             processed_batch = []
             for chunk in batch:
-                tokens = self.classifier_tokenizer.encode(chunk, add_special_tokens=True)
+                tokens = self.classifier.tokenizer.encode(chunk, add_special_tokens=True)
                 if len(tokens) > self.chunk_size:
                     logger.debug(f"Truncating chunk from {len(tokens)} to {self.chunk_size} tokens")
                     tokens = tokens[:self.chunk_size]
-                    chunk = self.classifier_tokenizer.decode(tokens[:-1])  # Remove partial token
+                    chunk = self.classifier.tokenizer.decode(tokens[:-1])  # Remove partial token
                 processed_batch.append(chunk)
             
             logger.debug(f"Processing batch of {len(processed_batch)} chunks")
             
             # Process batch with proper padding and truncation
-            return self.text_classifier_pipeline(
+            return self.classifier(
                 processed_batch,
+                candidate_labels=self.candidate_labels,
                 truncation=True,
                 padding=True,
                 max_length=self.chunk_size,
@@ -350,10 +352,9 @@ class NLPModel:
 
         return text
 
-    def _process_chunks_in_batches(self, chunks: List[str]) -> List[Dict]:
+    def _process_chunks_in_batches(self, chunks: List[str]) -> List[Dict[str, Any]]:
         """
-        Process all text chunks in optimized batches using multiprocessing and Hugging Face datasets.map()
-        for better performance on multi-core systems.
+        Process all text chunks in optimized batches.
 
         Args:
             chunks: List of text chunks to classify
@@ -364,107 +365,28 @@ class NLPModel:
         if not chunks:
             return []
 
-        logger.info(f"Processing {len(chunks)} chunks using multicore batch processing approach")
-
-        processed_chunks = [self._safe_truncate_text(chunk) for chunk in chunks]
-
+        all_results = []
+        logger.info(f"Processing {len(chunks)} chunks with zero-shot classifier.")
+        
         try:
-            if DATASETS_AVAILABLE:
-                hf_dataset = Dataset.from_dict({"text": processed_chunks})
-
-                import multiprocessing
-                total_cores = multiprocessing.cpu_count()
-                # Use multiprocessing only if we have more than one chunk to process
-                num_proc = min(total_cores, len(chunks)) if len(chunks) > 1 else 1
-
-                def predict_text_batch(examples):
-                    # This function is defined inside to have access to self, but a new pipeline
-                    # is created to avoid serialization issues with multiprocessing.
-                    local_pipeline = pipeline(
-                        "text-classification",
-                        model=self.classifier_model,
-                        tokenizer=self.classifier_tokenizer,
-                        device=self.device_id,
-                        truncation=True,
-                        padding=True,
-                        max_length=512
-                    )
-                    output = {"results": []}
-                    try:
-                        output["results"] = local_pipeline(
-                            examples["text"],
-                            truncation=True,
-                            padding=True,
-                            max_length=512,
-                        )
-                    except Exception as e:
-                        logger.error(f"Error in batch prediction: {e}")
-                    return output
-
-                # Suppress the num_proc warning by only setting it when num_proc > 1
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    if num_proc > 1:
-                        logger.info(f"Using {num_proc} CPU cores for parallel processing (out of {total_cores} available)")
-                        results_dataset = hf_dataset.map(
-                            predict_text_batch,
-                            batched=True,
-                            batch_size=4,
-                            num_proc=num_proc
-                        )
-                    else:
-                        logger.info("Processing with a single core (dataset size <= 1)")
-                        results_dataset = hf_dataset.map(
-                            predict_text_batch,
-                            batched=True,
-                            batch_size=4
-                        )
-
-                if "results" in results_dataset.column_names:
-                    logger.info(f"Successfully processed {len(chunks)} chunks in parallel")
-                    return results_dataset["results"]
-                else:
-                    logger.error("No 'results' column found in processed dataset")
-                    return []
-            else:
-                # Fallback to standard multiprocessing if datasets is not available
-                logger.info("Datasets library not available, using multiprocessing.Pool for parallel processing")
-                from multiprocessing import Pool, cpu_count
-
-                optimal_cores = max(1, min(cpu_count() - 1, 4))
-                batch_size = 4
-                all_results = []
-
-                batches = [processed_chunks[i:i+batch_size] for i in range(0, len(processed_chunks), batch_size)]
-
-                def process_batch(batch):
-                    try:
-                        return self.text_classifier_pipeline(
-                            batch,
-                            truncation=True,
-                            padding=True,
-                            max_length=512,
-                            batch_size=self.gpu_batch_size
-                        )
-                    except Exception as batch_err:
-                        logger.error(f"Error processing batch: {batch_err}")
-                        return [[{"label": "UNKNOWN", "score": 0.0}]] * len(batch)
-
-                logger.info(f"Processing {len(batches)} batches across {optimal_cores} CPU cores")
-                with Pool(processes=optimal_cores) as pool:
-                    batch_results = pool.map(process_batch, batches)
-
-                for result in batch_results:
-                    all_results.extend(result)
-
-                logger.info(f"Parallel processing complete. Processed {len(all_results)} chunks.")
-                return all_results
+            # The zero-shot pipeline can handle a list of texts directly.
+            # It's often more efficient to let the pipeline manage batching internally.
+            all_results = self.classifier(
+                chunks,
+                candidate_labels=self.candidate_labels,
+                batch_size=self.gpu_batch_size
+            )
         except Exception as e:
-            logger.error(f"Critical error in batch processing: {e}", exc_info=True)
-            return []
-        except Exception as e:
-            logger.error(f"Critical error in batch processing: {e}", exc_info=True)
-            return []
+            logger.error(f"An error occurred during zero-shot classification: {e}", exc_info=True)
+            # Return a list of Nones so the caller knows something went wrong for each chunk
+            return [None] * len(chunks)
+
+        # Ensure the output is a list, even for a single chunk input
+        if not isinstance(all_results, list):
+            all_results = [all_results]
+
+        logger.info(f"Successfully processed {len(chunks)} chunks.")
+        return all_results
     
     def classify_document(self, text: str, chunk_size: int, stride: int) -> Dict[str, Any]:
         """
@@ -507,20 +429,20 @@ class NLPModel:
         confidences = []
         
         for result in all_results:
-            if not result or not isinstance(result, list) or not result:
+            if result is None:
+                logger.warning("Skipping a chunk that failed during processing.")
                 continue
-            
-            # Get highest scoring label for this chunk
             try:
-                top_label = max(result, key=lambda x: x['score'])
-                predicted_label = top_label['label'].lower()
-                score = top_label['score']
+                # The result for each chunk is a dict with 'labels' and 'scores'.
+                # We find the score for our 'sensitive' label.
+                sensitive_index = result['labels'].index('sensitive')
+                sensitive_score = result['scores'][sensitive_index]
                 
-                is_sensitive = predicted_label in self.sensitive_label_keywords
+                is_sensitive = sensitive_score > 0.5  # Threshold for zero-shot classification
                 classifications.append(is_sensitive)
-                confidences.append(score)
-            except Exception as e:
-                logger.warning(f"Could not determine classification from result: {e}")
+                confidences.append(sensitive_score)
+            except (KeyError, TypeError, ValueError) as e:
+                logger.warning(f"Could not parse zero-shot classification result {result}: {e}")
                 continue
 
         # Determine overall classification based on chunk results
@@ -534,7 +456,18 @@ class NLPModel:
                 "error": "No chunks successfully classified"
             }
 
-        contains_sensitive_data = any(classifications)
+        contains_sensitive_data = False
+        sensitive_scores = [conf for is_sens, conf in zip(classifications, confidences) if is_sens]
+
+        if sensitive_scores:
+            max_sensitive_score = max(sensitive_scores)
+            if max_sensitive_score > 0.4:  # Lowered threshold
+                contains_sensitive_data = True
+                logger.debug(f"Sensitive content detected with max score {max_sensitive_score:.2f} (threshold > 0.4)")
+            else:
+                logger.debug(f"Sensitive content found but max score {max_sensitive_score:.2f} is below threshold 0.4")
+        else:
+            logger.debug("No sensitive content found in any chunks.")
         
         # Calculate confidence based on classification result
         if contains_sensitive_data:
@@ -759,25 +692,25 @@ class NLPModel:
         """
         import time
         start_time = time.time()
-        
+
         # For smaller texts, sequential is more efficient
         classification = self.classify_document(text, chunk_size=chunk_size, stride=stride)
         pii_entities = self.detect_pii(text, chunk_size=chunk_size, stride=stride)
-        
+
         # Calculate processing statistics
         processing_time = time.time() - start_time
         chars_per_second = len(text) / processing_time if processing_time > 0 else 0
-        
+
         # Determine if document is sensitive based on BOTH classification AND detected PII
         contains_sensitive_data = classification["contains_sensitive_data"] or len(pii_entities) > 0
-        
+
         # Adjust sensitivity score if PII is detected but classifier confidence is low
         sensitivity_score = classification["confidence"]
         if len(pii_entities) > 0 and sensitivity_score < 0.5:
             # Calculate new score based on number of PII entities (more PII = higher score)
             pii_based_score = min(0.95, 0.5 + (len(pii_entities) / 200))  # Cap at 0.95
             sensitivity_score = max(sensitivity_score, pii_based_score)  # Use the higher score
-        
+
         # Enhanced return information including stats
         result = {
             "classification": {
